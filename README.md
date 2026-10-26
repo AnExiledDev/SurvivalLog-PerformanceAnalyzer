@@ -41,6 +41,24 @@ The frame file is a CSV with one line per frame and a column per mod, for a spre
 | Overlay | Show frame time, the slowest mod, world updates, game speed and memory in the top-right corner, even with the panel closed. |
 | Deep (Mods tab) | Time every method of that mod. One mod at a time. |
 
+## For modders: markers
+
+The analyzer times your patches and Update methods on its own. To see which part of a slow method is the slow part, mark sections of your code:
+
+1. Copy [markers/PerfMarkers.cs](markers/PerfMarkers.cs) into your mod. It needs no reference to the analyzer.
+2. Make one marker per section, in a static field, and wrap the code:
+
+```csharp
+private static readonly PerfMarker CropScan = new("Crop scan");
+
+using (CropScan.Time())
+{
+    // the code to time
+}
+```
+
+Each marker shows as its own row, kind `marker`, in the Methods tab, the report and the list of what ran in each stutter. Its time is taken out of the method around it. Without the analyzer installed a marker does nothing.
+
 ## What it can't see
 
 - Time spent in the game's own code outside hooked methods is shown as "rest of game", not split further.

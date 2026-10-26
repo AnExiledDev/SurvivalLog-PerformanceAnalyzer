@@ -99,6 +99,11 @@ internal sealed class AnalyzerSession
             _log($"{_plugins.Loaded.Count} plugins loaded");
         }
 
+        // After the plugins are read, so a marker is charged to its plugin by name and not to its DLL's file name.
+        var markers = Markers.Registry.Drain(_recorder, _plugins.ModOf);
+
+        if (markers > 0) _log($"{markers} new markers, {Markers.Registry.Count} in all");
+
         _page.WantsPanel = _isOpen || Overlay;
         _page.KeepInstalled(time);
 

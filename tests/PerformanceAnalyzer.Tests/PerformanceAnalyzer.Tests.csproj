@@ -11,6 +11,7 @@
   <!-- The pure core is compiled straight in, so the tests need none of the game or BepInEx assemblies. -->
   <ItemGroup>
     <Compile Include="..\..\src\PerformanceAnalyzer\Core\*.cs" Link="Core\%(Filename)%(Extension)" />
+    <Compile Include="..\..\markers\PerfMarkers.cs" Link="markers\PerfMarkers.cs" />
   </ItemGroup>
 
   <!-- The page scripts as the plugin ships them, run in Jint. -->

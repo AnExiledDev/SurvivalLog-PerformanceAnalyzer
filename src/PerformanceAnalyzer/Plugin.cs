@@ -17,7 +17,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.2.1";
+    private const string Version = "0.3.0";
 
     public override void Load()
     {
@@ -79,6 +79,7 @@ public sealed class Plugin : BasePlugin
 
         log.Write($"===== Performance Analyzer {Version} started");
         Probes.Attach(recorder);
+        Markers.Attach(Probes.Begin, Probes.End);
         InputGate.Apply(harmony, log.Write);
         PageMessages.Apply(harmony, log.Write);
         ScriptCounter.Apply(harmony, traffic, log.Write);

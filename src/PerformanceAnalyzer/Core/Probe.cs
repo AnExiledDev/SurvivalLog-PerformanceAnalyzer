@@ -32,6 +32,9 @@ public enum ProbeKind
 
     /// <summary>The analyzer's own work.</summary>
     Analyzer,
+
+    /// <summary>A section of its own code a mod asked to have timed, through a marker.</summary>
+    Marker,
 }
 
 /// <param name="Name">Readable method name, "Type.Method".</param>
@@ -55,6 +58,7 @@ public static class ProbeKinds
         ProbeKind.ModMethod => "patched",
         ProbeKind.Deep => "deep",
         ProbeKind.Analyzer => "analyzer",
+        ProbeKind.Marker => "marker",
         _ => kind.ToString().ToLowerInvariant(),
     };
 }

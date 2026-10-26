@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+
+- Markers: a mod can time a section of its own code. Copy `markers/PerfMarkers.cs` into the mod and wrap the code in `using (marker.Time())`. Each section shows as its own row in the Methods tab, the report and the stutter list, and does nothing for players without the analyzer.
+
 ## 0.2.1
 
 - The panel no longer stutters the game. With the panel or overlay open it took up to 110 ms every half second; it now takes about 1 ms.
