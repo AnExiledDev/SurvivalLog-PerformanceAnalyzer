@@ -1,0 +1,3 @@
+# Game versions each version of Performance Analyzer is known to work on.
+# mod version = game versions, separated by commas
+0.1.0 = 1.1.19611
