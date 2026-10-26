@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- The panel no longer stutters the game. With the panel or overlay open it took up to 110 ms every half second; it now takes about 1 ms.
+- The stutter verdict counts every stutter of the session, not just the latest 200, and the analyzer's own stutters are listed apart from the mods.
+- The Mods table counts the stutters each mod caused (40% of the frame or more on its own), not every stutter it happened to run in.
+- The report says that KB/s and the mods' garbage collections are the mods' own runtime, not the game's.
+
 ## 0.2.0
 
 - New Game tab: frames per second, how often the game world updates, physics steps, the game speed and how fast the in-game clock runs.

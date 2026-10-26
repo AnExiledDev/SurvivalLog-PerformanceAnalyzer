@@ -207,9 +207,12 @@ public static class Report
             return;
         }
 
-        Line(text, $"{"mod",-30} {"ms/frame",9} {"p99 ms",8} {"worst ms",9} {"share",6} {"KB/s",8} {"hitches",8} {"probes",7}");
+        Line(text, $"{"mod",-30} {"ms/frame",9} {"p99 ms",8} {"worst ms",9} {"share",6} {"KB/s",8} {"caused",8} {"probes",7}");
 
-        foreach (var row in rows) Line(text, $"{Fit(row.Mod.Name + " " + row.Mod.Version, 30),-30} {row.AvgMs,9:0.000} {row.P99Ms,8:0.00} {row.WorstMs,9:0.00} {row.SharePercent,5:0.0}% {row.AllocKbPerSecond,8:0.0} {row.HitchFrames,8} {row.Probes,7}");
+        foreach (var row in rows) Line(text, $"{Fit(row.Mod.Name + " " + row.Mod.Version, 30),-30} {row.AvgMs,9:0.000} {row.P99Ms,8:0.00} {row.WorstMs,9:0.00} {row.SharePercent,5:0.0}% {row.AllocKbPerSecond,8:0.0} {row.CausedHitches,8} {row.Probes,7}");
+
+        Line(text, "KB/s is memory the mod's own code allocated on the mods' .NET runtime; the game's script heap is not counted here.");
+        Line(text, "caused: hitches where the mod took 40% of the frame or more on its own. p99 is rounded down, by up to 6%.");
 
         Line(text);
     }
@@ -251,6 +254,8 @@ public static class Report
 
             return;
         }
+
+        Line(text, "gc mods: collections by the mods' .NET runtime in that frame; gc game: collections by the game's own runtime.");
 
         for (var i = hitches.Count - 1; i >= 0 && i >= hitches.Count - HitchLines; i--)
         {

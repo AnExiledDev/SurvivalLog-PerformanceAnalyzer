@@ -19,7 +19,8 @@ public sealed record InstrumentStatus(int Hooks, int Patches, int Tickers, int D
 }
 
 /// <summary>One mod's line in the Mods table.</summary>
-public sealed record ModRow(int Id, ModInfo Mod, double AvgMs, double P99Ms, double WorstMs, double SharePercent, double AllocKbPerSecond, long HitchFrames, int Probes, long Calls);
+/// <param name="CausedHitches">Hitches where this mod took 40% of the frame or more on its own.</param>
+public sealed record ModRow(int Id, ModInfo Mod, double AvgMs, double P99Ms, double WorstMs, double SharePercent, double AllocKbPerSecond, long CausedHitches, int Probes, long Calls);
 
 /// <summary>One probe's line in the Methods table.</summary>
 public sealed record MethodRow(int Id, ProbeInfo Probe, string OwnerNames, long Calls, double CallsPerFrame, double SelfMsPerFrame, double TotalMs, double SelfMs, double MaxCallMs, double WorstFrameMs, double AllocKb, long OffThreadCalls);
@@ -30,7 +31,7 @@ public readonly record struct SplitAverages(double FrameMs, double ModsMs, doubl
 /// <summary>Turns what the recorder holds into the rows and numbers the panel and the report show.</summary>
 public static class Analysis
 {
-    public static Spread FrameSpread(Recorder recorder) => Spread.Of(recorder.Ring.Select(f => f.Ms));
+    public static Spread FrameSpread(Recorder recorder) => recorder.Ring.FrameSpread();
 
     public static SplitAverages Split(Recorder recorder)
     {
@@ -84,11 +85,11 @@ public static class Analysis
             if (probeCounts[mod] == 0 && totals.SelfMs <= 0) continue;
 
             var avg = totals.SelfMs / frames;
-            var p99 = Spread.Of(recorder.Ring.ModSeries(mod)).P99;
+            var p99 = recorder.Ring.ModP99(mod);
             var share = meanFrame > 0 ? 100 * avg / meanFrame : 0;
             var allocPerSecond = recordedSeconds > 0 ? totals.AllocBytes / 1024.0 / recordedSeconds : 0;
 
-            rows.Add(new ModRow(mod, recorder.Mods[mod], avg, p99, totals.WorstFrameMs, share, allocPerSecond, totals.HitchFrames, probeCounts[mod], calls[mod]));
+            rows.Add(new ModRow(mod, recorder.Mods[mod], avg, p99, totals.WorstFrameMs, share, allocPerSecond, totals.CausedHitches, probeCounts[mod], calls[mod]));
         }
 
         rows.Sort((a, b) => b.AvgMs.CompareTo(a.AvgMs));
@@ -203,25 +204,34 @@ public static class Analysis
             return lines;
         }
 
-        var causes = hitches.GroupBy(h => Cause(recorder, h)).OrderByDescending(g => g.Count()).ToList();
-        var summary = string.Join("; ", causes.Take(3).Select(g => $"{g.Key} ({g.Count()})"));
+        var analyzer = recorder.Mods[Recorder.AnalyzerMod].Name;
+        var causes = recorder.HitchCauses.Where(c => c.Key != analyzer).OrderByDescending(c => c.Value).ThenBy(c => c.Key, StringComparer.Ordinal).ToList();
+        var summary = string.Join("; ", causes.Take(3).Select(c => $"{c.Key} ({c.Value})"));
 
-        lines.Add($"{recorder.HitchCount} frames took {recorder.HitchMs:0} ms or more. Most likely causes: {summary}.");
+        lines.Add($"{recorder.HitchCount} frames took {recorder.HitchMs:0} ms or more." + (summary.Length > 0 ? $" Most likely causes: {summary}." : ""));
+
+        if (recorder.HitchCauses.TryGetValue(analyzer, out var own)) lines.Add($"The analyzer itself caused {own} of them; those are not a mod's fault.");
 
         return lines;
+    }
+
+    /// <summary>The mod that took 40% of a slow frame or more on its own, or <see cref="Recorder.NotTimed"/> when none did.</summary>
+    public static int CauseMod(Hitch hitch)
+    {
+        if (hitch.TopMods.Count == 0) return Recorder.NotTimed;
+
+        var top = hitch.TopMods[0];
+
+        return top.Id != Recorder.GameMod && top.Ms >= hitch.Sample.Ms * 0.4 ? top.Id : Recorder.NotTimed;
     }
 
     /// <summary>The single most likely reason one frame was slow.</summary>
     public static string Cause(Recorder recorder, Hitch hitch)
     {
         var sample = hitch.Sample;
+        var mod = CauseMod(hitch);
 
-        if (hitch.TopMods.Count > 0)
-        {
-            var top = hitch.TopMods[0];
-
-            if (top.Id != Recorder.GameMod && top.Ms >= sample.Ms * 0.4) return recorder.Mods[top.Id].Name;
-        }
+        if (mod != Recorder.NotTimed) return recorder.Mods[mod].Name;
 
         if (sample.GameGcs > 0) return "the game's garbage collection";
         if (sample.ManagedGcs > 0) return "garbage collection in mod code";

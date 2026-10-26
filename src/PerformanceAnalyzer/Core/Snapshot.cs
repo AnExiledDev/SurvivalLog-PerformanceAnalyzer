@@ -291,7 +291,7 @@ public static class Snapshot
             Number(json, "worst", row.WorstMs);
             Number(json, "share", row.SharePercent);
             Number(json, "allocKbS", row.AllocKbPerSecond);
-            json.WriteNumber("hitches", row.HitchFrames);
+            json.WriteNumber("hitches", row.CausedHitches);
             json.WriteNumber("probes", row.Probes);
             json.WriteNumber("calls", row.Calls);
             json.WriteBoolean("self", row.Id == Recorder.AnalyzerMod);

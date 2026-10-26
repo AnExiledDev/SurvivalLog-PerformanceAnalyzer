@@ -177,7 +177,54 @@ public class RecorderTests
         Assert.Equal(a, hitch.TopMods[0].Id);
         Assert.Equal("Battle", hitch.Scene);
         Assert.Equal("Mod A", Analysis.Cause(recorder, hitch));
-        Assert.Equal(1, recorder.ModTotals[a].HitchFrames);
+        Assert.Equal(1, recorder.ModTotals[a].CausedHitches);
+    }
+
+    [Fact]
+    public void A_mod_is_counted_for_the_hitches_it_caused_not_every_hitch_it_ran_in()
+    {
+        var (recorder, a, b) = NewRecorder(hitchMs: 50);
+        var slow = Probe(recorder, "A.Slow", ProbeKind.Ticker, a);
+        var quick = Probe(recorder, "B.Quick", ProbeKind.Ticker, b);
+        long t = 0;
+
+        for (var i = 0; i < 3; i++)
+        {
+            recorder.End(recorder.Begin(quick, Ms(t), 0), Ms(t + 1), 0);
+            recorder.End(recorder.Begin(slow, Ms(t + 1), 0), Ms(t + 61), 0);
+            t += 70;
+            recorder.EndFrame(Ms(t), default);
+        }
+
+        Assert.Equal(3, recorder.ModTotals[a].CausedHitches);
+        Assert.Equal(0, recorder.ModTotals[b].CausedHitches);
+    }
+
+    [Fact]
+    public void The_hitch_verdict_counts_every_hitch_not_only_the_ones_still_kept()
+    {
+        var (recorder, a, _) = NewRecorder(hitchMs: 50);
+        var slow = Probe(recorder, "A.Slow", ProbeKind.Ticker, a);
+        var own = Probe(recorder, "Analyzer.Push", ProbeKind.Ticker, Recorder.AnalyzerMod);
+        long t = 0;
+
+        for (var i = 0; i < 250; i++)
+        {
+            // The first 100 hitches are the analyzer's own; every later one is Mod A's.
+            recorder.End(recorder.Begin(i < 100 ? own : slow, Ms(t), 0), Ms(t + 60), 0);
+            t += 70;
+            recorder.EndFrame(Ms(t), default);
+        }
+
+        var verdict = string.Join("\n", Analysis.HitchVerdict(recorder));
+
+        Assert.Equal(200, recorder.Hitches.Count);
+        Assert.Contains("250 frames took 50 ms or more. Most likely causes: Mod A (150).", verdict);
+        Assert.Contains("The analyzer itself caused 100 of them", verdict);
+
+        recorder.Reset(Ms(t));
+
+        Assert.Empty(recorder.HitchCauses);
     }
 
     [Fact]

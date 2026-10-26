@@ -106,6 +106,8 @@ public class TextTests
         Assert.Contains("Mod A", text);
         Assert.Contains("ModA.Ticker.Update", text);
         Assert.Contains("1 frames took 50 ms or more", text);
+        Assert.Contains("the game's script heap is not counted", text);
+        Assert.Contains("gc game: collections by the game's own runtime", text);
         Assert.Contains("cheatmenu", text);
         Assert.All(text, c => Assert.True(c < 128, "non-ASCII character in the report: " + (int)c));
     }

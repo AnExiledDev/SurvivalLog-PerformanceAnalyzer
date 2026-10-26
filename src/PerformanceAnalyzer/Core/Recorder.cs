@@ -47,6 +47,7 @@ public sealed class Recorder
 
     private readonly Dictionary<int, long> _offThreadCalls = new();
     private readonly List<Hitch> _hitches = new();
+    private readonly Dictionary<string, long> _hitchCauses = new(StringComparer.Ordinal);
 
     private FrameRing _ring;
     private long _lastFrameEnd;
@@ -82,6 +83,9 @@ public sealed class Recorder
     public IReadOnlyList<ModTotals> ModTotals => _modTotals;
 
     public IReadOnlyList<Hitch> Hitches => _hitches;
+
+    /// <summary>Every hitch since the last reset by its most likely cause, including the ones no longer kept in <see cref="Hitches"/>.</summary>
+    public IReadOnlyDictionary<string, long> HitchCauses => _hitchCauses;
 
     public FrameRing Ring => _ring;
 
@@ -154,6 +158,7 @@ public sealed class Recorder
         foreach (var totals in _modTotals) totals.Clear();
 
         _hitches.Clear();
+        _hitchCauses.Clear();
         _ring.Clear();
         Game.Clear();
         _offThreadCalls.Clear();
@@ -331,7 +336,6 @@ public sealed class Recorder
             totals.Frames++;
 
             if (ms > totals.WorstFrameMs) totals.WorstFrameMs = ms;
-            if (frameMs >= HitchMs) totals.HitchFrames++;
         }
 
         return split;
@@ -359,7 +363,15 @@ public sealed class Recorder
 
         if (_hitches.Count == MaxHitches) _hitches.RemoveAt(0);
 
-        _hitches.Add(new Hitch(HitchCount, (now - _recordStart) / _ticksPerMs / 1000, FrameCount, sample, probes, mods, context.Scene));
+        var hitch = new Hitch(HitchCount, (now - _recordStart) / _ticksPerMs / 1000, FrameCount, sample, probes, mods, context.Scene);
+        var cause = Analysis.Cause(this, hitch);
+        var causeMod = Analysis.CauseMod(hitch);
+
+        _hitches.Add(hitch);
+        _hitchCauses.TryGetValue(cause, out var count);
+        _hitchCauses[cause] = count + 1;
+
+        if (causeMod != NotTimed) _modTotals[causeMod].CausedHitches++;
     }
 
     /// <summary>Forgets probes still open; an End for one of them later is ignored, since its token is past the new depth or reused.</summary>
@@ -441,13 +453,14 @@ public sealed class ModTotals
     public double SelfMs;
     public long AllocBytes;
     public long Frames;
-    public long HitchFrames;
+    /// <summary>Hitches where this mod took 40% of the frame or more on its own.</summary>
+    public long CausedHitches;
     public double WorstFrameMs;
 
     public void Clear()
     {
         SelfMs = WorstFrameMs = 0;
-        AllocBytes = Frames = HitchFrames = 0;
+        AllocBytes = Frames = CausedHitches = 0;
     }
 }
 

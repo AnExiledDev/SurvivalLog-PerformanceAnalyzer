@@ -262,7 +262,7 @@
     const [field, ascending] = state.sort.mods;
     const rows = F.sortRows(snap.mods || [], field, ascending);
     const deep = (snap.status && snap.status.deepMod) || '';
-    const cols = [['name', 'Mod'], ['avg', 'ms / frame', 1], ['p99', '99th', 1], ['worst', 'worst frame', 1], ['share', 'share', 1], ['allocKbS', 'alloc / s', 1], ['hitches', 'in hitches', 1], ['probes', 'timed', 1], ['calls', 'calls', 1]];
+    const cols = [['name', 'Mod'], ['avg', 'ms / frame', 1], ['p99', '99th', 1], ['worst', 'worst frame', 1], ['share', 'share', 1], ['allocKbS', 'alloc / s', 1], ['hitches', 'hitches caused', 1], ['probes', 'timed', 1], ['calls', 'calls', 1]];
     const body = rows.map((m) => `<tr><td>${esc(m.name)} <span class="dim">${esc(m.version)}</span>${m.self ? ' <em>(this tool)</em>' : ''}</td>` +
       `<td class="n ${F.costClass(m.avg)}">${F.ms(m.avg)}</td><td class="n">${F.ms(m.p99)}</td><td class="n">${F.ms(m.worst)}</td><td class="n">${F.percent(m.share)}</td>` +
       `<td class="n">${F.kb(m.allocKbS)}</td><td class="n">${F.count(m.hitches)}</td><td class="n">${F.count(m.probes)}</td><td class="n">${F.count(m.calls)}</td>` +
