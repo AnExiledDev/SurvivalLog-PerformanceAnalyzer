@@ -61,6 +61,8 @@ public readonly record struct MemoryReading(long ModsHeap, long GameHeap, long U
 /// <param name="LogicFrames">Frames where the game world updated.</param>
 /// <param name="ClockAdvance">In-game seconds the clock moved.</param>
 /// <param name="Memory">The latest memory reading in the second.</param>
+/// <param name="Page">The game page showing at the end of the second.</param>
+/// <param name="Web">The page's style, layout and script work in the second, when remote debugging is on.</param>
 public readonly record struct SecondSample(
     long Second,
     int Frames,
@@ -75,7 +77,9 @@ public readonly record struct SecondSample(
     float GameSpeed,
     bool Paused,
     MemoryReading Memory,
-    string Scene)
+    string Scene,
+    string Page = "",
+    WebReading Web = default)
 {
     public double Fps => Ms > 0 ? Frames * 1000.0 / Ms : 0;
 
@@ -186,8 +190,22 @@ public sealed class GameStats
     private WorldReading _world;
     private MemoryReading _memory;
     private string _scene = "";
+    private string _page = "";
+    private WebReading _web;
 
     public IReadOnlyList<SecondSample> Timeline => _timeline;
+
+    /// <summary>Every web reading added up, and how many seconds had one.</summary>
+    public WebReading WebTotals { get; private set; }
+
+    public int WebSeconds { get; private set; }
+
+    /// <summary>The slowest second for the page's own work (style, layout and script), when any reading came in.</summary>
+    public WebReading WebWorst { get; private set; }
+
+    public long WebWorstSecond { get; private set; } = -1;
+
+    public string WebWorstPage { get; private set; } = "";
 
     public IReadOnlyList<SceneStats> Scenes => _scenes;
 
@@ -262,7 +280,7 @@ public sealed class GameStats
     }
 
     /// <param name="atSeconds">Seconds into the recording at the frame's end.</param>
-    public void Add(double atSeconds, double frameMs, bool isHitch, string scene, WorldReading world, MemoryReading memory)
+    public void Add(double atSeconds, double frameMs, bool isHitch, string scene, WorldReading world, MemoryReading memory, string page = "")
     {
         scene ??= "";
 
@@ -325,10 +343,25 @@ public sealed class GameStats
 
         _world = world;
         _scene = scene;
+        _page = page ?? "";
 
         if (!memory.IsEmpty) NoteMemory(atSeconds, memory);
 
         Scene(scene).Add(frameMs, isHitch, world.LogicRan);
+    }
+
+    /// <summary>One second of the page's own work from the browser's counters; it lands in the second being recorded.</summary>
+    public void NoteWeb(WebReading reading)
+    {
+        _web = _web.Plus(reading);
+        WebTotals = WebTotals.Plus(reading);
+        WebSeconds++;
+
+        if (reading.BusyMs <= WebWorst.BusyMs) return;
+
+        WebWorst = reading;
+        WebWorstSecond = _second;
+        WebWorstPage = _page;
     }
 
     public void Clear()
@@ -343,6 +376,12 @@ public sealed class GameStats
         _world = default;
         _memory = default;
         _scene = "";
+        _page = "";
+        _web = default;
+        WebTotals = WebWorst = default;
+        WebSeconds = 0;
+        WebWorstSecond = -1;
+        WebWorstPage = "";
         Frames = LogicFrames = FixedSteps = CappedFrames = 0;
         Ms = InGameMs = PausedMs = LogicMs = ClockAdvance = GameTimeMs = CappedMs = 0;
         FirstMemory = LastMemory = PeakMemory = default;
@@ -395,7 +434,7 @@ public sealed class GameStats
         {
             if (_timeline.Count == TimelineSeconds) _timeline.RemoveAt(0);
 
-            _timeline.Add(new SecondSample(_second, _frames, (float)_ms, (float)_maxMs, _logic, _fixed, _hitches, (float)_clock, (float)_capped, _world.TimeScale, _world.GameSpeed, _world.Paused, _memory, _scene));
+            _timeline.Add(new SecondSample(_second, _frames, (float)_ms, (float)_maxMs, _logic, _fixed, _hitches, (float)_clock, (float)_capped, _world.TimeScale, _world.GameSpeed, _world.Paused, _memory, _scene, _page, _web));
         }
 
         ClearSecond();
@@ -403,6 +442,7 @@ public sealed class GameStats
 
     private void ClearSecond()
     {
+        _web = default;
         _frames = _logic = _fixed = _hitches = 0;
         _ms = _maxMs = _clock = _capped = 0;
     }

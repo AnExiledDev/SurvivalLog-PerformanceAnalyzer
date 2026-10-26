@@ -1,6 +1,6 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -23,13 +23,24 @@ public static class Snapshot
     public const int HitchLimit = 60;
     public const int GraphSeconds = 300;
 
+    // One buffer and writer per thread, kept between updates: the panel asks for a snapshot twice a second, and a
+    // fresh stream grows through every size up to the snapshot's on each call.
+    [ThreadStatic] private static ArrayBufferWriter<byte>? _buffer;
+    [ThreadStatic] private static Utf8JsonWriter? _writer;
+
     public static string Json(Recorder recorder, SnapshotInput input) => Culture.Invariant(() => Write(recorder, input));
 
     private static string Write(Recorder recorder, SnapshotInput input)
     {
-        using var stream = new MemoryStream();
+        var buffer = _buffer ??= new ArrayBufferWriter<byte>(64 * 1024);
 
-        using (var json = new Utf8JsonWriter(stream))
+        buffer.Clear();
+
+        if (_writer == null) _writer = new Utf8JsonWriter(buffer);
+        else _writer.Reset(buffer);
+
+        var json = _writer;
+
         {
             var seconds = recorder.RecordedSeconds(input.Now);
             var spread = Analysis.FrameSpread(recorder);
@@ -80,12 +91,64 @@ public static class Snapshot
                 json.WriteNumber("hitchesKept", recorder.Hitches.Count);
                 WriteHitches(json, recorder);
             }
-            if (input.Tab == PanelTab.Web) WriteScripts(json, input.Scripts, seconds);
+            if (input.Tab == PanelTab.Web)
+            {
+                WriteScripts(json, input.Scripts, seconds);
+                WriteSlowMessages(json, recorder);
+                WriteBrowser(json, recorder.Game);
+            }
 
             json.WriteEndObject();
         }
 
-        return Encoding.UTF8.GetString(stream.ToArray());
+        json.Flush();
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    private static void WriteSlowMessages(Utf8JsonWriter json, Recorder recorder)
+    {
+        var messages = recorder.SlowMessages;
+
+        json.WriteNumber("slowMessageCount", recorder.SlowMessageCount);
+        json.WriteStartArray("slowMessages");
+
+        for (var i = messages.Count - 1; i >= 0; i--)
+        {
+            var m = messages[i];
+
+            json.WriteStartObject();
+            Number(json, "at", m.AtSeconds);
+            Number(json, "ms", m.Ms, 1);
+            json.WriteString("command", m.Command);
+            json.WriteString("head", m.Head);
+            json.WriteString("page", m.Page);
+            json.WriteEndObject();
+        }
+
+        json.WriteEndArray();
+    }
+
+    /// <summary>The browser's own counters, when remote debugging is on and they came in.</summary>
+    private static void WriteBrowser(Utf8JsonWriter json, GameStats game)
+    {
+        if (game.WebSeconds == 0) return;
+
+        var n = (double)game.WebSeconds;
+        var t = game.WebTotals;
+
+        json.WriteStartObject("browser");
+        json.WriteNumber("seconds", game.WebSeconds);
+        Number(json, "styles", t.StyleCount / n, 1);
+        Number(json, "styleMs", t.StyleMs / n);
+        Number(json, "layouts", t.LayoutCount / n, 1);
+        Number(json, "layoutMs", t.LayoutMs / n);
+        Number(json, "scriptMs", t.ScriptMs / n);
+        Number(json, "taskMs", t.TaskMs / n);
+        Number(json, "worstBusyMs", game.WebWorst.BusyMs, 1);
+        json.WriteNumber("worstSecond", game.WebWorstSecond);
+        json.WriteString("worstPage", game.WebWorstPage);
+        json.WriteEndObject();
     }
 
     /// <summary>The newest frame and the mod costing the most, for the overlay, which draws with the panel closed.</summary>
@@ -371,7 +434,16 @@ public static class Snapshot
             Number(json, "self", row.SelfMs);
             Number(json, "total", row.TotalMs);
             Number(json, "maxCall", row.MaxCallMs, 3);
+            Number(json, "firstCall", row.FirstCallMs, 3);
             Number(json, "worstFrame", row.WorstFrameMs, 3);
+
+            if (row.MaxCall != null)
+            {
+                Number(json, "maxCallAt", row.MaxCall.AtSeconds, 1);
+                Number(json, "maxCallFrameMs", row.MaxCall.Sample.Ms, 1);
+                json.WriteString("maxCallWhere", Where(row.MaxCall.Scene, row.MaxCall.Page));
+            }
+
             Number(json, "allocKb", row.AllocKb);
             Number(json, "allocKbS", seconds > 0 ? row.AllocKb / seconds : 0);
             json.WriteBoolean("game", row.Probe.Kind == ProbeKind.Game);
@@ -406,7 +478,22 @@ public static class Snapshot
             json.WriteNumber("gcGame", sample.GameGcs);
             WriteEngine(json, sample.Engine);
             json.WriteString("scene", hitch.Scene);
-            json.WriteString("cause", Analysis.Cause(recorder, hitch));
+            json.WriteString("page", hitch.Page);
+            json.WriteString("cause", hitch.CauseText.Length > 0 ? hitch.CauseText : Analysis.Cause(recorder, hitch));
+            json.WriteStartArray("messages");
+
+            foreach (var m in recorder.SlowMessages)
+            {
+                if (m.Frame != hitch.Frame) continue;
+
+                json.WriteStartObject();
+                Number(json, "ms", m.Ms, 1);
+                json.WriteString("command", m.Command);
+                json.WriteString("head", m.Head);
+                json.WriteEndObject();
+            }
+
+            json.WriteEndArray();
             json.WriteStartArray("top");
 
             foreach (var entry in hitch.TopProbes)
@@ -478,6 +565,9 @@ public static class Snapshot
 
         json.WriteEndArray();
     }
+
+    /// <summary>"map, PhoneSMS": the scene and the page, whichever are known.</summary>
+    public static string Where(string scene, string page) => scene.Length > 0 && page.Length > 0 ? scene + ", " + page : scene + page;
 
     /// <summary>Rounded so the page gets short numbers; NaN and infinity become 0 since JSON has neither.</summary>
     private static void Number(Utf8JsonWriter json, string name, double value, int digits = 2) =>

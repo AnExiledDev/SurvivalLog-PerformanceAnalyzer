@@ -17,7 +17,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.4.0";
+    private const string Version = "0.5.0";
 
     public override void Load()
     {
@@ -60,8 +60,8 @@ public sealed class Plugin : BasePlugin
             "Mark each mod's scripts so the page can time how long each mod's scripts run. Turn it off if a menu mod misbehaves while recording.\n" +
             "为各模组的脚本加上标记，以便页面统计每个模组脚本的运行时间。如果记录时某个菜单模组出现异常，请关闭此项。");
         var remoteDebugging = Config.Bind("Web", "RemoteDebugging", false,
-            "Let Chrome's developer tools attach to the game's menus: open chrome://inspect in Chrome and add localhost and the port below. Needs a game restart.\n" +
-            "允许 Chrome 开发者工具连接到游戏菜单：在 Chrome 中打开 chrome://inspect，并添加 localhost 与下面的端口。需要重启游戏。");
+            "Let Chrome's developer tools attach to the game's menus: open chrome://inspect in Chrome and add localhost and the port below. While recording, the analyzer also reads the menus' style, layout and script time each second for the report. Needs a game restart.\n" +
+            "允许 Chrome 开发者工具连接到游戏菜单：在 Chrome 中打开 chrome://inspect，并添加 localhost 与下面的端口。记录时，分析器还会每秒读取菜单的样式、布局与脚本耗时并写入报告。需要重启游戏。");
         var remotePort = Config.Bind("Web", "RemoteDebuggingPort", 9222,
             "Port for Chrome's developer tools when RemoteDebugging is on. Needs a game restart.\n" +
             "开启 RemoteDebugging 时 Chrome 开发者工具使用的端口。需要重启游戏。");
@@ -74,7 +74,8 @@ public sealed class Plugin : BasePlugin
         var recorder = new Recorder(Stopwatch.Frequency / 1000.0, Math.Max(16, windowFrames.Value), hitchMs.Value);
         var plugins = new PluginIndex(recorder);
         var traffic = new ScriptTraffic();
-        var session = new AnalyzerSession(recorder, plugins, new Instrumenter(recorder, plugins, Guid, log.Write), new FrameSource(log.Write), new WebPage(log.Write), traffic,
+        var browser = remoteDebugging.Value ? new BrowserMetrics(remotePort.Value, log.Write) : null;
+        var session = new AnalyzerSession(recorder, plugins, new Instrumenter(recorder, plugins, Guid, log.Write), new FrameSource(log.Write), new WebPage(log.Write), traffic, browser,
             Path.Combine(Paths.BepInExRootPath, "performance-analyzer"), Version, isOn => overlay.Value = isOn, log.Write);
 
         log.Write($"===== Performance Analyzer {Version} started");
@@ -83,6 +84,7 @@ public sealed class Plugin : BasePlugin
         InputGate.Apply(harmony, log.Write);
         PageMessages.Apply(harmony, log.Write);
         ScriptCounter.Apply(harmony, traffic, log.Write);
+        SlowMessages.Apply(harmony, recorder, log.Write);
 
         if (remoteDebugging.Value) WebPage.EnableRemoteDebugging(remotePort.Value, log.Write);
 

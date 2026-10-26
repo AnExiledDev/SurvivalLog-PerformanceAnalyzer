@@ -24,12 +24,16 @@ internal sealed class AnalyzerSession
 {
     private const float PushSeconds = 0.5f;
 
+    /// <summary>The Methods and Hitches lists are the largest snapshots, so they refresh half as often.</summary>
+    private const float SlowPushSeconds = 1f;
+
     private readonly Recorder _recorder;
     private readonly PluginIndex _plugins;
     private readonly Instrumenter _instrumenter;
     private readonly FrameSource _frames;
     private readonly WebPage _page;
     private readonly ScriptTraffic _traffic;
+    private readonly BrowserMetrics? _browser;
     private readonly string _reportDir;
     private readonly string _version;
     private readonly Action<bool> _saveOverlay;
@@ -43,7 +47,7 @@ internal sealed class AnalyzerSession
     private float _nextPushAt;
     private string _webJson = "";
 
-    public AnalyzerSession(Recorder recorder, PluginIndex plugins, Instrumenter instrumenter, FrameSource frames, WebPage page, ScriptTraffic traffic, string reportDir, string version, Action<bool> saveOverlay, Action<string> log)
+    public AnalyzerSession(Recorder recorder, PluginIndex plugins, Instrumenter instrumenter, FrameSource frames, WebPage page, ScriptTraffic traffic, BrowserMetrics? browser, string reportDir, string version, Action<bool> saveOverlay, Action<string> log)
     {
         _recorder = recorder;
         _plugins = plugins;
@@ -51,6 +55,7 @@ internal sealed class AnalyzerSession
         _frames = frames;
         _page = page;
         _traffic = traffic;
+        _browser = browser;
         _reportDir = reportDir;
         _version = version;
         _saveOverlay = saveOverlay;
@@ -122,9 +127,17 @@ internal sealed class AnalyzerSession
 
         if (_recorder.IsRecording) _frames.SampleMemory(time);
 
+        if (_browser != null)
+        {
+            while (_browser.TryTake(out var reading))
+            {
+                if (_recorder.IsRecording) _recorder.Game.NoteWeb(reading);
+            }
+        }
+
         if ((_isOpen || Overlay) && time >= _nextPushAt)
         {
-            _nextPushAt = time + PushSeconds;
+            _nextPushAt = time + (_isOpen && _tab is PanelTab.Methods or PanelTab.Hitches ? SlowPushSeconds : PushSeconds);
             Push();
         }
     }
@@ -217,6 +230,9 @@ internal sealed class AnalyzerSession
             case PageCommand.Web web:
                 _webJson = web.Json;
                 break;
+            case PageCommand.Showing showing:
+                _recorder.SetPage(showing.Page);
+                break;
             case PageCommand.Unknown unknown:
                 _log("panel: " + unknown.Text);
                 break;
@@ -236,6 +252,8 @@ internal sealed class AnalyzerSession
 
         _instrumenter.Activate(Settings.Probes, Time.unscaledTime);
         _recorder.Start(Stopwatch.GetTimestamp());
+
+        if (_browser != null) _browser.IsWanted = true;
         ScriptCounter.IsCounting = Settings.ScriptTraffic;
         ScriptCounter.IsTagging = Settings.ScriptTraffic && Settings.TagScripts;
 
@@ -254,6 +272,9 @@ internal sealed class AnalyzerSession
         if (!_recorder.IsRecording) return;
 
         _recorder.Stop(Stopwatch.GetTimestamp());
+
+        if (_browser != null) _browser.IsWanted = false;
+
         ScriptCounter.IsCounting = false;
         ScriptCounter.IsTagging = false;
         _page.ProbeRecording(false, false);

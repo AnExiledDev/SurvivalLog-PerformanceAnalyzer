@@ -62,7 +62,9 @@ public enum MethodSide
 }
 
 /// <summary>One probe's line in the Methods table.</summary>
-public sealed record MethodRow(int Id, ProbeInfo Probe, string OwnerNames, long Calls, double CallsPerFrame, double SelfMsPerFrame, double TotalMs, double SelfMs, double MaxCallMs, double WorstFrameMs, double AllocKb, long OffThreadCalls);
+/// <param name="FirstCallMs">The first call's length, which often pays for loading and setup.</param>
+/// <param name="MaxCall">Where the slowest call happened, with that frame's breakdown.</param>
+public sealed record MethodRow(int Id, ProbeInfo Probe, string OwnerNames, long Calls, double CallsPerFrame, double SelfMsPerFrame, double TotalMs, double SelfMs, double MaxCallMs, double WorstFrameMs, double AllocKb, long OffThreadCalls, double FirstCallMs = 0, WorstCall? MaxCall = null);
 
 /// <summary>Averages per frame over the frames in the window.</summary>
 public readonly record struct SplitAverages(double FrameMs, double ModsMs, double HookMs, double GameMs, double AnalyzerMs, double RestMs);
@@ -206,7 +208,7 @@ public static class Analysis
 
         foreach (var hitch in recorder.Hitches)
         {
-            var key = (Cause(recorder, hitch), TopMethod(recorder, hitch));
+            var key = (hitch.CauseText.Length > 0 ? hitch.CauseText : Cause(recorder, hitch), hitch.CauseText.Length > 0 ? hitch.MethodText : TopMethod(recorder, hitch));
 
             if (!groups.TryGetValue(key, out var list)) groups[key] = list = new List<Hitch>();
 
@@ -232,7 +234,7 @@ public static class Analysis
     public static string MethodName(ProbeInfo probe) => probe.Kind is ProbeKind.Prefix or ProbeKind.Postfix or ProbeKind.Finalizer ? probe.Name + " " + ProbeKinds.Label(probe.Kind) : probe.Name;
 
     /// <summary>The frame's slowest method with its mod, when it took a fifth of the frame or more; "" otherwise.</summary>
-    private static string TopMethod(Recorder recorder, Hitch hitch)
+    public static string TopMethod(Recorder recorder, Hitch hitch)
     {
         if (hitch.TopProbes.Count == 0 || hitch.TopProbes[0].Ms < hitch.Sample.Ms * 0.2) return "";
 
@@ -268,8 +270,10 @@ public static class Analysis
     {
         var frames = Math.Max(1, recorder.FrameCount);
         var tpm = recorder.TicksPerMs;
-        var rows = new List<MethodRow>();
+        var picked = new List<(int Id, long Self, long OffThread)>();
 
+        // Pick and sort on the numbers alone, then build rows (and their owner strings) only for the ones kept: the
+        // panel asks for this twice a second over every probe, and most of them never make the list.
         for (var p = 0; p < recorder.Probes.Count; p++)
         {
             var probe = recorder.Probes[p];
@@ -277,21 +281,65 @@ public static class Analysis
             var offThread = recorder.OffThreadCalls(p);
 
             if (totals.Calls == 0 && offThread == 0) continue;
-            if (modKey.Length > 0 && !probe.Owners.Any(o => recorder.Mods[o].Key == modKey)) continue;
+            if (modKey.Length > 0 && !OwnedBy(recorder, probe, modKey)) continue;
             if (side == MethodSide.Mods && probe.Kind == ProbeKind.Game) continue;
             if (side == MethodSide.Game && probe.Kind != ProbeKind.Game) continue;
 
-            var owners = string.Join(", ", probe.Owners.Select(o => recorder.Mods[o].Name));
-
-            rows.Add(new MethodRow(p, probe, owners, totals.Calls, (double)totals.Calls / frames, totals.SelfTicks / tpm / frames, totals.TotalTicks / tpm, totals.SelfTicks / tpm, totals.MaxCallTicks / tpm, totals.WorstFrameMs, totals.AllocBytes / 1024.0, offThread));
+            picked.Add((p, totals.SelfTicks, offThread));
         }
 
-        rows.Sort((a, b) => b.SelfMs.CompareTo(a.SelfMs));
+        picked.Sort((a, b) => b.Self != a.Self ? b.Self.CompareTo(a.Self) : a.Id.CompareTo(b.Id));
 
-        if (rows.Count > limit) rows.RemoveRange(limit, rows.Count - limit);
+        var rows = new List<MethodRow>(Math.Min(limit, picked.Count));
+
+        for (var i = 0; i < picked.Count && i < limit; i++) rows.Add(Row(recorder, picked[i].Id, picked[i].OffThread, frames, tpm));
 
         return rows;
     }
+
+    /// <summary>Methods by their single slowest call, slowest first; the calls stay listed after their frames leave the window.</summary>
+    public static List<MethodRow> SlowestCalls(Recorder recorder, int limit)
+    {
+        var frames = Math.Max(1, recorder.FrameCount);
+        var picked = new List<(int Id, long Max)>();
+
+        for (var p = 0; p < recorder.Probes.Count; p++)
+        {
+            var totals = recorder.ProbeTotals[p];
+
+            if (totals.Calls > 0 && recorder.Probes[p].Kind != ProbeKind.Analyzer) picked.Add((p, totals.MaxCallTicks));
+        }
+
+        picked.Sort((a, b) => b.Max != a.Max ? b.Max.CompareTo(a.Max) : a.Id.CompareTo(b.Id));
+
+        var rows = new List<MethodRow>(Math.Min(limit, picked.Count));
+
+        for (var i = 0; i < picked.Count && i < limit; i++) rows.Add(Row(recorder, picked[i].Id, recorder.OffThreadCalls(picked[i].Id), frames, recorder.TicksPerMs));
+
+        return rows;
+    }
+
+    private static MethodRow Row(Recorder recorder, int p, long offThread, long frames, double tpm)
+    {
+        var probe = recorder.Probes[p];
+        var totals = recorder.ProbeTotals[p];
+        var owners = probe.Owners.Length == 1 ? recorder.Mods[probe.Owners[0]].Name : string.Join(", ", probe.Owners.Select(o => recorder.Mods[o].Name));
+
+        return new MethodRow(p, probe, owners, totals.Calls, (double)totals.Calls / frames, totals.SelfTicks / tpm / frames, totals.TotalTicks / tpm, totals.SelfTicks / tpm, totals.MaxCallTicks / tpm, totals.WorstFrameMs, totals.AllocBytes / 1024.0, offThread, totals.FirstCallTicks / tpm, totals.MaxCall.IsNone ? null : totals.MaxCall);
+    }
+
+    private static bool OwnedBy(Recorder recorder, ProbeInfo probe, string modKey)
+    {
+        foreach (var owner in probe.Owners)
+        {
+            if (recorder.Mods[owner].Key == modKey) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The slow web messages handled in one frame.</summary>
+    public static IEnumerable<SlowMessage> MessagesIn(Recorder recorder, long frame) => recorder.SlowMessages.Where(m => m.Frame == frame);
 
     /// <summary>Plain sentences on what the numbers say, most important first.</summary>
     public static List<string> Verdict(Recorder recorder, double recordedSeconds)

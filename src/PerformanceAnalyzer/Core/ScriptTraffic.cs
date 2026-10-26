@@ -13,14 +13,19 @@ public sealed class ScriptTraffic
 {
     public const string GameOwner = "game";
 
+    /// <summary>Exiled's Toolkit names its globals "__exiledtoolkit..." rather than "__sl...", and posts as "toolkit".</summary>
+    public const string ToolkitOwner = "toolkit";
+
     private const string Marker = "__sl";
+    private const string ToolkitMarker = "__exiledtoolkit";
 
     private readonly Dictionary<string, ScriptCounts> _byOwner = new(StringComparer.Ordinal);
     private readonly object _gate = new();
 
     /// <summary>
     /// Who sent a script: the lowercase run after the first "__sl", or <see cref="GameOwner"/>. Mods name extra globals
-    /// with a capitalized suffix ("__slcheatmenuCss"), so the suffix is left off.
+    /// with a capitalized suffix ("__slcheatmenuCss"), so the suffix is left off. A script with no "__sl" name that
+    /// drives Exiled's Toolkit's globals is <see cref="ToolkitOwner"/>.
     /// </summary>
     public static string OwnerOf(string? script)
     {
@@ -32,7 +37,7 @@ public sealed class ScriptTraffic
         {
             var at = script.IndexOf(Marker, from, StringComparison.Ordinal);
 
-            if (at < 0) return GameOwner;
+            if (at < 0) return script.Contains(ToolkitMarker, StringComparison.Ordinal) ? ToolkitOwner : GameOwner;
 
             var start = at + Marker.Length;
             var end = start;

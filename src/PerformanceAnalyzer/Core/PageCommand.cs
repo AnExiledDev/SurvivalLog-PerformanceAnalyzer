@@ -48,6 +48,9 @@ public abstract record PageCommand
     /// <summary>The web probe's summary of the last second, as JSON.</summary>
     public sealed record Web(string Json) : PageCommand;
 
+    /// <summary>The game page now showing, as the web probe sees it: "hud", "PhoneSMS", or several joined with '+'.</summary>
+    public sealed record Showing(string Page) : PageCommand;
+
     public sealed record Unknown(string Text) : PageCommand;
 
     public static bool IsOurs(string? message) => message is not null && message.StartsWith(Prefix, StringComparison.Ordinal);
@@ -77,6 +80,7 @@ public abstract record PageCommand
             "deep" when IsModKey(rest) => new Deep(rest),
             "overlay" when rest is "0" or "1" => new Overlay(rest == "1"),
             "web" when rest.StartsWith("{", StringComparison.Ordinal) => new Web(rest),
+            "page" when IsPageName(rest) => new Showing(rest),
             _ => new Unknown(message),
         };
     }
@@ -89,6 +93,19 @@ public abstract record PageCommand
         foreach (var c in key)
         {
             if (c is not (>= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_' or '.')) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>A page name is up to 120 letters, digits and "+-_.", so it goes into a CSV cell as it is.</summary>
+    public static bool IsPageName(string name)
+    {
+        if (name.Length == 0 || name.Length > 120) return false;
+
+        foreach (var c in name)
+        {
+            if (c is not (>= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '+' or '-' or '_' or '.')) return false;
         }
 
         return true;

@@ -21,13 +21,13 @@ This is a development tool for testing mods. It is not released and has no Nexus
 - **Stutters (hitches)**: every frame over 50 ms is kept with the methods and mods that ran longest in it, the scene, and whether a garbage collection ran. Each one gets a likely cause.
 - **Methods**: every timed patch and Update method, sortable and with a filter.
 - **Deep profile**: the Deep button on a mod's row also times every method in that mod, to find the slow one inside it.
-- **Menus**: the Web tab times each mod's scripts inside the game's web UI, and counts the scripts each mod sends, the page elements it owns, and the timers, intervals, listeners and observers it leaves running. A mod with a lot of these slows the menus even when its own code looks fast.
+- **Menus**: the Web tab times each mod's scripts inside the game's web UI, and counts the scripts each mod sends, the page elements it owns, and the timers, intervals, listeners and observers it leaves running. A mod with a lot of these slows the menus even when its own code looks fast. This covers the main page and every game page inside it. Long tasks show how much of their time no mod's script explains, slow messages from a page to the game are listed with what they asked for, and each game page gets its element and listener count.
 - **The game itself**: frames per second, world updates per second, physics steps per second, the game speed and how many in-game seconds pass per real second. The game has no fixed tick: it updates its world once per frame, so world updates follow the frame rate. When a frame runs longer than the engine allows, the game itself slows down; the analyzer shows how much game time was lost that way.
 - **Memory**: the game's script memory, the mods' memory, what the engine has allocated and reserved, textures and the whole process, read once a second, with the peak and the growth per minute. A reading the game build doesn't give shows as not available.
 - **Scenes**: frame rate and frame time spread for each scene since the last reset.
 - **Its own cost**: the analyzer measures what one timing costs and reports its own share, so you can see how much it adds.
 
-The frame file is a CSV with one line per frame and a column per mod, for a spreadsheet. The seconds file has one line per second of the last hour: frame rate, world updates, game speed, the scene and memory.
+The frame file is a CSV with one line per frame and a column per mod, for a spreadsheet. The seconds file has one line per second of the last hour: frame rate, world updates, game speed, the scene, the game page that was open, and memory. With `RemoteDebugging` on it also has the browser's style, layout and script time for each second.
 
 ## Buttons
 

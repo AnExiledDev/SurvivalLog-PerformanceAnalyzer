@@ -296,7 +296,7 @@ public class GameStatsTests
         Assert.StartsWith("second,frames,fps", seconds[0]);
         Assert.Equal(4, seconds.Length);
         Assert.Contains(",Main,", seconds[1]);
-        Assert.EndsWith(",paused,capped_ms", frames[0]);
-        Assert.EndsWith(",1,1,0,10", frames[10]);
+        Assert.EndsWith(",paused,capped_ms,page", frames[0]);
+        Assert.EndsWith(",1,1,0,10,", frames[10]);
     }
 }

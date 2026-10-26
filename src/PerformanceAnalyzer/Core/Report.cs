@@ -22,6 +22,8 @@ public static class Report
     private const int GameMethodLines = 15;
     private const int HitchLines = 10;
     private const int GroupLines = 15;
+    private const int SlowCallLines = 15;
+    private const int SlowMessageLines = 15;
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
@@ -66,8 +68,11 @@ public static class Report
         WriteMods(text, Analysis.ModRows(recorder, seconds));
         WriteMethods(text, $"Slowest mod methods (top {MethodLines} by self time)", Analysis.MethodRows(recorder, MethodLines, side: MethodSide.Mods), seconds);
         WriteMethods(text, $"Game code inside hooked methods (top {GameMethodLines})", Analysis.MethodRows(recorder, GameMethodLines, side: MethodSide.Game), seconds);
+        WriteSlowestCalls(text, recorder);
         WriteHitches(text, recorder);
         WriteScripts(text, input.Scripts, seconds);
+        WriteSlowMessages(text, recorder);
+        WriteBrowser(text, recorder.Game);
         WriteWeb(text, input.WebJson);
         WriteCoverage(text, input.Status, recorder);
         WriteLoaded(text, input.Loaded);
@@ -79,7 +84,7 @@ public static class Report
     {
         var ring = recorder.Ring;
         var mods = Enumerable.Range(0, recorder.Mods.Count).Where(m => m != Recorder.GameMod && ring.Count > 0 && Enumerable.Range(0, ring.Count).Any(i => ring.ModMs(m, i) > 0)).ToList();
-        var csv = new StringBuilder("frame,ms,mods_ms,hooks_ms,game_in_hooks_ms,analyzer_ms,rest_ms,gc_mods,gc_game,engine_main_ms,engine_render_ms,engine_gpu_ms,time_scale,game_speed,game_dt_ms,fixed_steps,logic_ran,paused,capped_ms");
+        var csv = new StringBuilder("frame,ms,mods_ms,hooks_ms,game_in_hooks_ms,analyzer_ms,rest_ms,gc_mods,gc_game,engine_main_ms,engine_render_ms,engine_gpu_ms,time_scale,game_speed,game_dt_ms,fixed_steps,logic_ran,paused,capped_ms,page");
 
         foreach (var mod in mods) csv.Append(',').Append(CsvName(recorder.Mods[mod].Key)).Append("_ms");
 
@@ -89,7 +94,7 @@ public static class Report
         {
             var f = ring[i];
 
-            csv.Append(string.Join(",", new[] { (recorder.FrameCount - ring.Count + i + 1).ToString(Invariant), F(f.Ms), F(f.ModsMs), F(f.HookMs), F(f.GameMs), F(f.AnalyzerMs), F(f.RestMs), f.ManagedGcs.ToString(Invariant), f.GameGcs.ToString(Invariant), F(f.Engine.MainThreadMs), F(f.Engine.RenderThreadMs), F(f.Engine.GpuMs), F(f.World.TimeScale), F(f.World.GameSpeed), F(f.World.DeltaSeconds * 1000), f.World.FixedSteps.ToString(Invariant), f.World.LogicRan ? "1" : "0", f.World.Paused ? "1" : "0", F(f.World.LogicRan && !f.World.Paused ? f.World.CappedMs : 0) }));
+            csv.Append(string.Join(",", new[] { (recorder.FrameCount - ring.Count + i + 1).ToString(Invariant), F(f.Ms), F(f.ModsMs), F(f.HookMs), F(f.GameMs), F(f.AnalyzerMs), F(f.RestMs), f.ManagedGcs.ToString(Invariant), f.GameGcs.ToString(Invariant), F(f.Engine.MainThreadMs), F(f.Engine.RenderThreadMs), F(f.Engine.GpuMs), F(f.World.TimeScale), F(f.World.GameSpeed), F(f.World.DeltaSeconds * 1000), f.World.FixedSteps.ToString(Invariant), f.World.LogicRan ? "1" : "0", f.World.Paused ? "1" : "0", F(f.World.LogicRan && !f.World.Paused ? f.World.CappedMs : 0), CsvPage(recorder.PageName(f.Page)) }));
 
             foreach (var mod in mods) csv.Append(',').Append(F(ring.ModMs(mod, i)));
 
@@ -101,13 +106,13 @@ public static class Report
 
     private static string WriteSecondsCsv(GameStats game)
     {
-        var csv = new StringBuilder("second,frames,fps,max_ms,hitches,logic_per_s,fixed_per_s,game_speed,time_scale,paused,clock_per_s,capped_ms,scene,game_heap_mb,mods_heap_mb,engine_allocated_mb,engine_reserved_mb,textures_mb,process_mb\n");
+        var csv = new StringBuilder("second,frames,fps,max_ms,hitches,logic_per_s,fixed_per_s,game_speed,time_scale,paused,clock_per_s,capped_ms,scene,game_heap_mb,mods_heap_mb,engine_allocated_mb,engine_reserved_mb,textures_mb,process_mb,page,web_styles,web_style_ms,web_layouts,web_layout_ms,web_script_ms,web_task_ms\n");
 
         foreach (var s in game.Timeline)
         {
             var m = s.Memory;
 
-            csv.Append(string.Join(",", new[] { s.Second.ToString(Invariant), s.Frames.ToString(Invariant), D(s.Fps), F(s.MaxMs), s.Hitches.ToString(Invariant), D(s.LogicPerSecond), D(s.FixedPerSecond), F(s.GameSpeed), F(s.TimeScale), s.Paused ? "1" : "0", D(s.ClockRate), F(s.CappedMs), CsvName(s.Scene), Mb(m.GameHeap), Mb(m.ModsHeap), Mb(m.UnityAllocated), Mb(m.UnityReserved), Mb(m.Textures), Mb(m.WorkingSet) }));
+            csv.Append(string.Join(",", new[] { s.Second.ToString(Invariant), s.Frames.ToString(Invariant), D(s.Fps), F(s.MaxMs), s.Hitches.ToString(Invariant), D(s.LogicPerSecond), D(s.FixedPerSecond), F(s.GameSpeed), F(s.TimeScale), s.Paused ? "1" : "0", D(s.ClockRate), F(s.CappedMs), CsvName(s.Scene), Mb(m.GameHeap), Mb(m.ModsHeap), Mb(m.UnityAllocated), Mb(m.UnityReserved), Mb(m.Textures), Mb(m.WorkingSet), CsvPage(s.Page), Web(s.Web, s.Web.StyleCount), Web(s.Web, s.Web.StyleMs), Web(s.Web, s.Web.LayoutCount), Web(s.Web, s.Web.LayoutMs), Web(s.Web, s.Web.ScriptMs), Web(s.Web, s.Web.TaskMs) }));
             csv.Append('\n');
         }
 
@@ -286,15 +291,93 @@ public static class Report
             return;
         }
 
-        Line(text, $"{"self ms",9} {"ms/frame",9} {"calls/frame",11} {"max call",9} {"alloc/s",9}  kind       method (owner)");
+        Line(text, $"{"self ms",9} {"ms/frame",9} {"calls/frame",11} {"max call",9} {"first call",10} {"alloc/s",9}  kind       method (owner)");
 
         foreach (var row in rows)
         {
             var target = row.Probe.Target.Length > 0 ? " on " + row.Probe.Target : "";
 
-            Line(text, $"{row.SelfMs,9:0.0} {row.SelfMsPerFrame,9:0.0000} {row.CallsPerFrame,11:0.0} {row.MaxCallMs,9:0.000} {PerSecond(row.AllocKb, seconds),9}  {ProbeKinds.Label(row.Probe.Kind),-10} {row.Probe.Name}{target} ({row.OwnerNames}){(row.OffThreadCalls > 0 ? $" [{row.OffThreadCalls} calls off the main thread, not timed]" : "")}");
+            Line(text, $"{row.SelfMs,9:0.0} {row.SelfMsPerFrame,9:0.0000} {row.CallsPerFrame,11:0.0} {row.MaxCallMs,9:0.000} {row.FirstCallMs,10:0.000} {PerSecond(row.AllocKb, seconds),9}  {ProbeKinds.Label(row.Probe.Kind),-10} {row.Probe.Name}{target} ({row.OwnerNames}){(row.OffThreadCalls > 0 ? $" [{row.OffThreadCalls} calls off the main thread, not timed]" : "")}");
         }
 
+        Line(text);
+    }
+
+    private static void WriteSlowestCalls(StringBuilder text, Recorder recorder)
+    {
+        var rows = Analysis.SlowestCalls(recorder, SlowCallLines);
+
+        Heading(text, $"Slowest single calls (top {SlowCallLines}, kept for the whole recording)");
+
+        if (rows.Count == 0)
+        {
+            Line(text, "none timed yet");
+            Line(text);
+
+            return;
+        }
+
+        Line(text, $"{"max call",9} {"first call",10} {"at s",7} {"frame ms",9}  where, frame parts, method (owner)");
+
+        foreach (var row in rows)
+        {
+            var call = row.MaxCall;
+            var s = call?.Sample ?? default;
+            var where = call == null ? "" : Snapshot.Where(call.Scene, call.Page);
+            var parts = call == null ? "" : $"mods {s.ModsMs:0.0}, hooks {s.HookMs:0.0}, game in hooks {s.GameMs:0.0}, rest {s.RestMs:0.0}";
+
+            Line(text, $"{row.MaxCallMs,9:0.00} {row.FirstCallMs,10:0.00} {call?.AtSeconds ?? 0,7:0.0} {s.Ms,9:0.0}  {(where.Length > 0 ? where + "; " : "")}{(parts.Length > 0 ? parts + "; " : "")}{Analysis.MethodName(row.Probe)} ({row.OwnerNames})");
+        }
+
+        Line(text, "max call: the method's slowest call, counting the calls inside it. first call: its first call, which often pays for loading and setup. frame ms: the whole frame that call was in.");
+        Line(text);
+    }
+
+    private static void WriteSlowMessages(StringBuilder text, Recorder recorder)
+    {
+        var messages = recorder.SlowMessages;
+
+        Heading(text, $"Slow web messages (the game handling a message from the web UI in {recorder.HitchMs:0} ms or more)");
+
+        if (messages.Count == 0)
+        {
+            Line(text, "none");
+            Line(text);
+
+            return;
+        }
+
+        if (recorder.SlowMessageCount > messages.Count) Line(text, $"{recorder.SlowMessageCount} in all; the last {messages.Count} are kept");
+
+        Line(text, $"{"ms",7} {"at s",7} {"page",-14} {"command",-30}  first 80 characters");
+
+        foreach (var m in messages.OrderByDescending(m => m.Ms).Take(SlowMessageLines)) Line(text, $"{m.Ms,7:0.0} {m.AtSeconds,7:0.0} {Fit(m.Page, 14),-14} {Fit(m.Command, 30),-30}  {m.Head}");
+
+        Line(text, "command: the message's type, page and parameter. Type 3 is a page talking to the game; the page decides what it asks for.");
+        Line(text);
+    }
+
+    private static void WriteBrowser(StringBuilder text, GameStats game)
+    {
+        Heading(text, "Browser work (from remote debugging)");
+
+        if (game.WebSeconds == 0)
+        {
+            Line(text, "not read: turn on [Web] RemoteDebugging and restart the game to get these");
+            Line(text);
+
+            return;
+        }
+
+        var n = (double)game.WebSeconds;
+        var t = game.WebTotals;
+        var w = game.WebWorst;
+
+        Line(text, $"per second over {game.WebSeconds} s: {t.StyleCount / n:0.0} style recalcs ({t.StyleMs / n:0.0} ms), {t.LayoutCount / n:0.0} layouts ({t.LayoutMs / n:0.0} ms), scripts {t.ScriptMs / n:0.0} ms, all tasks {t.TaskMs / n:0.0} ms");
+
+        if (game.WebWorstSecond >= 0) Line(text, $"busiest second: {game.WebWorstSecond} s{(game.WebWorstPage.Length > 0 ? " on " + game.WebWorstPage : "")}, styles {w.StyleMs:0.0} ms ({w.StyleCount:0}), layout {w.LayoutMs:0.0} ms ({w.LayoutCount:0}), scripts {w.ScriptMs:0.0} ms");
+
+        Line(text, "The seconds CSV has these per second. Many style recalcs or layouts a second usually means a script keeps changing the page.");
         Line(text);
     }
 
@@ -329,9 +412,12 @@ public static class Report
         {
             var s = hitch.Sample;
             var gc = s.ManagedGcs + s.GameGcs > 0 ? $", gc mods {s.ManagedGcs} game {s.GameGcs}" : "";
-            var scene = hitch.Scene.Length > 0 ? $" in {hitch.Scene}" : "";
+            var where = Snapshot.Where(hitch.Scene, hitch.Page);
+            var scene = where.Length > 0 ? $" in {where}" : "";
 
-            Line(text, $"#{hitch.Number} at {hitch.AtSeconds:0.0} s{scene}: {s.Ms:0.0} ms (mods {s.ModsMs:0.0}, hooks {s.HookMs:0.0}, game in hooks {s.GameMs:0.0}, analyzer {s.AnalyzerMs:0.0}, rest {s.RestMs:0.0}{gc}) -> {Analysis.Cause(recorder, hitch)}");
+            Line(text, $"#{hitch.Number} at {hitch.AtSeconds:0.0} s{scene}: {s.Ms:0.0} ms (mods {s.ModsMs:0.0}, hooks {s.HookMs:0.0}, game in hooks {s.GameMs:0.0}, analyzer {s.AnalyzerMs:0.0}, rest {s.RestMs:0.0}{gc}) -> {(hitch.CauseText.Length > 0 ? hitch.CauseText : Analysis.Cause(recorder, hitch))}");
+
+            foreach (var m in Analysis.MessagesIn(recorder, hitch.Frame)) Line(text, $"    {m.Ms,8:0.00} ms  web message {m.Command}: {m.Head}");
 
             foreach (var entry in hitch.TopProbes.Take(4))
             {
@@ -383,13 +469,29 @@ public static class Report
 
             Line(text, $"page frames/s {Get(root, "fps"):0}, longest gap {Get(root, "worstGapMs"):0} ms, long tasks {Get(root, "longTasks"):0} ({Get(root, "longTaskMs"):0} ms), script heap {Get(root, "heapMB"):0.0} MB, page elements {Get(root, "domNodes"):0}, over the last {Get(root, "seconds"):0} s");
 
+            if (Get(root, "longTasks") > 0) Line(text, $"long task time no timed script explains: {Get(root, "longTaskUnownedMs"):0} ms of {Get(root, "longTaskMs"):0} ms. That is the page's own work: style, layout, painting, or the game's scripts.");
+
+            if (root.TryGetProperty("longTaskPages", out var taskPages) && taskPages.ValueKind == JsonValueKind.Array && taskPages.GetArrayLength() > 0)
+            {
+                Line(text, $"{"long tasks on page",-20} {"count",6} {"ms",8} {"unexplained",12}");
+
+                foreach (var page in taskPages.EnumerateArray()) Line(text, $"{Fit(Ascii(Str(page, "page")), 20),-20} {Get(page, "count"),6:0} {Get(page, "ms"),8:0} {Get(page, "unownedMs"),12:0}");
+            }
+
+            if (root.TryGetProperty("pages", out var pages) && pages.ValueKind == JsonValueKind.Array && pages.GetArrayLength() > 0)
+            {
+                Line(text, $"{"page frame",-20} {"elements",9} {"listeners",10}");
+
+                foreach (var page in pages.EnumerateArray()) Line(text, $"{Fit(Ascii(Str(page, "name")), 20),-20} {Get(page, "elements"),9:0} {Get(page, "listeners"),10:0}");
+            }
+
             if (root.TryGetProperty("owners", out var owners) && owners.ValueKind == JsonValueKind.Array)
             {
                 Line(text, $"{"script",-20} {"ms",8} {"calls",7} {"worst ms",9} {"elements",9} {"listeners",10} {"timers",7} {"messages",9}");
 
                 foreach (var owner in owners.EnumerateArray())
                 {
-                    var key = owner.TryGetProperty("key", out var k) && k.ValueKind == JsonValueKind.String ? k.GetString() ?? "" : "";
+                    var key = Str(owner, "key");
 
                     Line(text, $"{Fit(Ascii(key), 20),-20} {Get(owner, "ms"),8:0.0} {Get(owner, "calls"),7:0} {Get(owner, "worstMs"),9:0.0} {Get(owner, "dom"),9:0} {Get(owner, "listeners"),10:0} {Get(owner, "timers"),7:0} {Get(owner, "posts"),9:0}");
                 }
@@ -422,6 +524,9 @@ public static class Report
         foreach (var mod in loaded) Line(text, $"{mod.Name} {mod.Version} ({mod.Guid})");
     }
 
+    private static string Str(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
+
     private static double Get(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetDouble() : 0;
 
@@ -438,6 +543,12 @@ public static class Report
     private static string Mb(long bytes) => bytes > 0 ? (bytes / Analysis.MB).ToString("0.0", Invariant) : "";
 
     private static string CsvName(string key) => new(key.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
+
+    /// <summary>A page name for a CSV cell: "PhoneSMS+Map" keeps its '+', anything else odd becomes '_'.</summary>
+    private static string CsvPage(string page) => new(page.Select(c => c < 128 && (char.IsLetterOrDigit(c) || c is '+' or '-' or '.') ? c : '_').ToArray());
+
+    /// <summary>A browser counter for the seconds CSV: blank in a second with no reading (a reading always has some task time).</summary>
+    private static string Web(WebReading reading, float value) => reading.TaskMs > 0 ? value.ToString("0.##", Invariant) : "";
 
     /// <summary>Anything outside printable ASCII becomes '?', so the report pastes cleanly anywhere.</summary>
     public static string Ascii(string text)

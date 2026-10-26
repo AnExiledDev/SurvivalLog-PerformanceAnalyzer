@@ -33,7 +33,7 @@ Settings live in `BepInEx\config\com.dev.survivallog.perfanalyzer.cfg`, created 
 | `Probe` | `true` | Watch the menus from inside the page while recording. |
 | `ScriptTraffic` | `true` | Count the scripts each mod sends to the menus, and their size. |
 | `TagScripts` | `true` | Mark each mod's scripts so the page can time them. Turn it off if a menu mod misbehaves while recording. |
-| `RemoteDebugging` | `false` | Let Chrome's developer tools attach to the menus. Needs a game restart. |
+| `RemoteDebugging` | `false` | Let Chrome's developer tools attach to the menus. While recording, the analyzer also reads the menus' style, layout and script time each second for the report. Needs a game restart. |
 | `RemoteDebuggingPort` | `9222` | Port for Chrome's developer tools. |
 
 With `RemoteDebugging` on, open `chrome://inspect` in Chrome on the same PC, add `localhost:9222` under Configure, and the game's page shows up to inspect, with Chrome's own Performance profiler.

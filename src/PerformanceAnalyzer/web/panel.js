@@ -297,17 +297,17 @@
     const [field, ascending] = state.sort.methods;
     const side = (snap.methods || []).filter((m) => state.side === 'all' || (state.side === 'game') === !!m.game);
     const rows = F.sortRows(F.filterRows(side, state.filter, ['name', 'kind', 'target', 'owners']), field, ascending);
-    const cols = [['name', 'Method'], ['kind', 'Kind'], ['owners', 'Mod'], ['perFrame', 'calls / frame', 1], ['selfPerFrame', 'self ms / frame', 1], ['self', 'self ms', 1], ['total', 'total ms', 1], ['maxCall', 'slowest call', 1], ['worstFrame', 'worst frame', 1], ['allocKbS', 'alloc / s', 1], ['offThread', 'off thread', 1]];
+    const cols = [['name', 'Method'], ['kind', 'Kind'], ['owners', 'Mod'], ['perFrame', 'calls / frame', 1], ['selfPerFrame', 'self ms / frame', 1], ['self', 'self ms', 1], ['total', 'total ms', 1], ['maxCall', 'slowest call', 1], ['maxCallAt', 'slowest at', 1], ['firstCall', 'first call', 1], ['worstFrame', 'worst frame', 1], ['allocKbS', 'alloc / s', 1], ['offThread', 'off thread', 1]];
     const sides = [['mods', 'Mod code'], ['game', 'Game code in hooks'], ['all', 'All']].map(([key, label]) => `<button data-side="${key}" class="${state.side === key ? 'on' : ''}">${label}</button>`).join('');
     const body = rows.slice(0, 300).map((m) => `<tr title="${esc(m.target ? 'on ' + m.target : '')}"><td class="name">${esc(m.name)}</td><td>${esc(m.kind)}</td><td>${esc(m.owners)}</td>` +
       `<td class="n">${F.ms(m.perFrame)}</td><td class="n ${F.costClass(m.selfPerFrame)}">${F.ms(m.selfPerFrame)}</td><td class="n">${F.ms(m.self)}</td><td class="n">${F.ms(m.total)}</td>` +
-      `<td class="n">${F.ms(m.maxCall)}</td><td class="n">${F.ms(m.worstFrame)}</td><td class="n">${m.allocKbS ? F.kb(m.allocKbS) + '/s' : ''}</td><td class="n">${m.offThread ? F.count(m.offThread) : ''}</td></tr>`).join('');
-    const table = `<table class="wide">${header('methods', cols)}${body || '<tr><td colspan="11" class="dim">Nothing timed matches.</td></tr>'}</table>`;
+      `<td class="n">${F.ms(m.maxCall)}</td><td class="n" title="${esc(m.maxCallWhere ? 'frame ' + F.ms(m.maxCallFrameMs) + ' ms in ' + m.maxCallWhere : '')}">${m.maxCallAt !== undefined ? F.seconds(m.maxCallAt) : ''}</td><td class="n">${F.ms(m.firstCall)}</td><td class="n">${F.ms(m.worstFrame)}</td><td class="n">${m.allocKbS ? F.kb(m.allocKbS) + '/s' : ''}</td><td class="n">${m.offThread ? F.count(m.offThread) : ''}</td></tr>`).join('');
+    const table = `<table class="wide">${header('methods', cols)}${body || '<tr><td colspan="13" class="dim">Nothing timed matches.</td></tr>'}</table>`;
 
     if (keepFocus && $('#methods')) { $('#methods').innerHTML = table; return; }
 
     $('#main').innerHTML =
-      `<div class="bar">${sides}<input id="filter" placeholder="Filter by method, kind, target or mod" value="${esc(state.filter)}"><span class="dim">Self time leaves out timed code called inside. Hover a row for the method it hooks.</span></div>` +
+      `<div class="bar">${sides}<input id="filter" placeholder="Filter by method, kind, target or mod" value="${esc(state.filter)}"><span class="dim">Self time leaves out timed code called inside. Hover a row for the method it hooks, and "slowest at" for the frame it was in.</span></div>` +
       `<div id="methods">${table}</div>`;
   }
 
@@ -317,12 +317,14 @@
       const top = (h.top || []).map((t) => `<tr><td class="name">${esc(t.name)}</td><td>${esc(t.kind)}</td><td>${esc(t.owner)}</td><td class="n">${F.ms(t.ms)}</td><td class="n">${F.count(t.calls)}</td></tr>`).join('');
       const mods = (h.mods || []).map((m) => `<span>${esc(m.name)} <b>${F.ms(m.ms)} ms</b></span>`).join('');
       const engine = h.engine ? ` <span class="dim">engine: main ${F.ms(h.engine.main)}, render ${F.ms(h.engine.render)}, GPU ${F.ms(h.engine.gpu)} ms</span>` : '';
+      const messages = (h.messages || []).map((m) => `<tr><td class="n">${F.ms(m.ms)}</td><td class="name">${esc(m.command)}</td><td class="dim">${esc(m.head)}</td></tr>`).join('');
       const gc = h.gcManaged || h.gcGame ? ` <span class="warn">GC: ${h.gcManaged} mod, ${h.gcGame} game</span>` : '';
 
-      return `<article><h4><b class="${F.frameClass(h.ms)}">${F.ms(h.ms)} ms</b> #${h.n} at ${F.seconds(h.at)}${h.scene ? ' in ' + esc(h.scene) : ''}${gc}${engine}</h4>` +
+      return `<article><h4><b class="${F.frameClass(h.ms)}">${F.ms(h.ms)} ms</b> #${h.n} at ${F.seconds(h.at)}${h.scene ? ' in ' + esc(h.scene) : ''}${h.page ? ' on ' + esc(h.page) : ''}${gc}${engine}</h4>` +
         `<p>${esc(h.cause)}</p>` +
         `<p class="dim">mods ${F.ms(h.mods)} ms, hook overhead ${F.ms(h.hook)} ms, game code in hooks ${F.ms(h.game)} ms, this analyzer ${F.ms(h.analyzer)} ms, rest ${F.ms(h.rest)} ms</p>` +
         (mods ? `<div class="chips">${mods}</div>` : '') +
+        (messages ? `<table><tr><th class="n">ms</th><th>Slow web message</th><th>Start of the message</th></tr>${messages}</table>` : '') +
         (top ? `<table><tr><th>Slowest in this frame</th><th>Kind</th><th>Mod</th><th class="n">ms</th><th class="n">calls</th></tr>${top}</table>` : '') +
         '</article>';
     }).join('');
@@ -340,6 +342,17 @@
     const w = probe && probe.summary ? probe.summary() : null;
     const owners = w ? w.owners.map((o) => `<tr><td>${esc(o.key)}</td><td class="n ${F.costClass(o.ms / Math.max(1, w.seconds * w.fps))}">${F.ms(o.ms)}</td><td class="n">${F.count(o.calls)}</td><td class="n">${F.ms(o.worstMs)}</td><td class="n">${F.count(o.dom)}</td><td class="n">${F.count(o.listeners)}</td><td class="n">${F.count(o.timers)}</td><td class="n">${F.count(o.intervals)}</td><td class="n">${F.count(o.observers)}</td><td class="n">${F.count(o.posts)}</td></tr>`).join('') : '';
 
+    const taskPages = w && w.longTaskPages ? w.longTaskPages.map((p) => `<tr><td>${esc(p.page)}</td><td class="n">${F.count(p.count)}</td><td class="n">${F.ms(p.ms)}</td><td class="n">${F.ms(p.unownedMs)}</td></tr>`).join('') : '';
+    const pages = w && w.pages ? w.pages.map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${F.count(p.elements)}</td><td class="n">${F.count(p.listeners)}</td></tr>`).join('') : '';
+    const b = snap.browser;
+    const browser = '<section><h3>Browser counters</h3>' + (b
+      ? `<div class="tiles">${tile('Style recalcs / s', b.styles.toFixed(1), '')}${tile('Style ms / s', F.ms(b.styleMs), '')}${tile('Layouts / s', b.layouts.toFixed(1), '')}${tile('Layout ms / s', F.ms(b.layoutMs), '')}${tile('Script ms / s', F.ms(b.scriptMs), '')}${tile('Task ms / s', F.ms(b.taskMs), '')}</div>` +
+        `<p class="dim">Averages over ${F.count(b.seconds)} s. Busiest second: ${F.ms(b.worstBusyMs)} ms at ${F.count(b.worstSecond)} s${b.worstPage ? ' on ' + esc(b.worstPage) : ''}.</p>`
+      : '<p class="dim">None yet. Turn on [Web] RemoteDebugging and restart the game to read them while recording.</p>') + '</section>';
+    const slowList = (snap.slowMessages || []).map((m) => `<tr><td class="n">${F.seconds(m.at)}</td><td class="n ${F.frameClass(m.ms)}">${F.ms(m.ms)}</td><td>${esc(m.page)}</td><td class="name">${esc(m.command)}</td><td class="dim">${esc(m.head)}</td></tr>`).join('');
+    const slow = `<section><h3>Slow web messages${snap.slowMessageCount > (snap.slowMessages || []).length ? ` <span class="dim">(the last ${F.count((snap.slowMessages || []).length)} of ${F.count(snap.slowMessageCount)})</span>` : ''}</h3>` +
+      (slowList ? `<table><tr><th class="n">at</th><th class="n">ms</th><th>Page</th><th>Command</th><th>Start of the message</th></tr>${slowList}</table>` : '<p class="dim">No message from a page took a hitch\'s worth of time in the game.</p>') + '</section>';
+
     $('#main').innerHTML =
       '<section><h3>Scripts sent to the web UI</h3><p class="dim">Every script a mod or the game hands the web view. Many small scripts a second, or large ones, keep the page busy.</p>' +
       `<table><tr><th>Sender</th><th class="n">scripts</th><th class="n">per second</th><th class="n">size</th><th class="n">per second</th><th class="n">largest</th></tr>${scripts || '<tr><td colspan="6" class="dim">None counted. Start recording.</td></tr>'}</table></section>` +
@@ -347,9 +360,12 @@
       (w
         ? `<div class="tiles">${tile('Page FPS', w.fps.toFixed(0), '')}${tile('Longest gap', F.ms(w.worstGapMs) + ' ms', F.frameClass(w.worstGapMs))}${tile('Long tasks', F.count(w.longTasks) + ' / ' + F.ms(w.longTaskMs) + ' ms', '')}${tile('Script heap', w.heapMB.toFixed(1) + ' MB', '')}${tile('Elements', F.count(w.domNodes), '')}</div>` +
           `<table><tr><th>Script owner</th><th class="n">run ms</th><th class="n">runs</th><th class="n">slowest</th><th class="n">elements</th><th class="n">listeners</th><th class="n">timeouts</th><th class="n">intervals</th><th class="n">observers</th><th class="n">messages</th></tr>${owners}</table>` +
-          '<p class="dim">Run time counts scripts the plugin sent, and timers, listeners and observers they set up while recording. Listeners and timers a mod made before recording started show under no owner.</p>'
+          '<p class="dim">Run time counts scripts the plugin sent, and timers, listeners and observers they set up while recording, in the main page and in every game page. Listeners and timers a mod made before recording started show under no owner.</p>' +
+          (w.longTasks ? `<p>Long task time no timed script explains: <b>${F.ms(w.longTaskUnownedMs)} ms</b> of ${F.ms(w.longTaskMs)} ms. That is the page's own work: style, layout, painting, or the game's scripts.</p>` : '') +
+          (taskPages ? `<table><tr><th>Long tasks on page</th><th class="n">count</th><th class="n">ms</th><th class="n">unexplained ms</th></tr>${taskPages}</table>` : '') +
+          (pages ? `<table><tr><th>Page frame</th><th class="n">elements</th><th class="n">listeners</th></tr>${pages}</table><p class="dim">Showing now: ${esc(w.page || 'hud')}. Listeners count those added since the probe arrived.</p>` : '')
         : '<p class="dim">The web probe is not in the page. It is sent when recording starts, unless [Web] Probe is off.</p>') +
-      '</section>';
+      '</section>' + browser + slow;
   }
 
   function drawReport() {

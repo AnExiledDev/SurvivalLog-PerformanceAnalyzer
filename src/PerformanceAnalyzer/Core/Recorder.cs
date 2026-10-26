@@ -25,6 +25,8 @@ public sealed class Recorder
     private const int MaxDepth = 256;
     private const int MaxHitches = 200;
     private const int HitchTopCount = 8;
+    private const int MaxSlowMessages = 50;
+    private const int MaxPages = 200;
 
     private readonly double _ticksPerMs;
     private readonly List<ProbeInfo> _probes = new();
@@ -48,6 +50,10 @@ public sealed class Recorder
     private readonly Dictionary<int, long> _offThreadCalls = new();
     private readonly List<Hitch> _hitches = new();
     private readonly Dictionary<string, long> _hitchCauses = new(StringComparer.Ordinal);
+    private readonly List<SlowMessage> _slowMessages = new();
+    private readonly List<string> _pageNames = new() { "" };
+    private readonly Dictionary<string, short> _pageIds = new(StringComparer.Ordinal) { [""] = 0 };
+    private short _page;
 
     private FrameRing _ring;
     private long _lastFrameEnd;
@@ -89,6 +95,14 @@ public sealed class Recorder
 
     public FrameRing Ring => _ring;
 
+    /// <summary>The game page that was showing ("hud", "PhoneSMS"), as the web probe last reported it; "" before it did.</summary>
+    public string Page => _pageNames[_page];
+
+    /// <summary>Slow calls of the game's web message handler, the last <see cref="MaxSlowMessages"/>.</summary>
+    public IReadOnlyList<SlowMessage> SlowMessages => _slowMessages;
+
+    public long SlowMessageCount { get; private set; }
+
     /// <summary>The game side: logic updates, game speed and clock, memory over time, frame times per scene.</summary>
     public GameStats Game { get; } = new();
 
@@ -100,6 +114,44 @@ public sealed class Recorder
     public int Overflow => _overflow;
 
     public double RecordedSeconds(long now) => IsRecording ? (now - _recordStart) / _ticksPerMs / 1000 : _stoppedSeconds;
+
+    /// <summary>The page frames are marked with from now on. Past <see cref="MaxPages"/> names, new ones mark as "other".</summary>
+    public void SetPage(string? page)
+    {
+        page ??= "";
+
+        if (!_pageIds.TryGetValue(page, out var id))
+        {
+            if (_pageNames.Count >= MaxPages) page = "other";
+
+            if (!_pageIds.TryGetValue(page, out id))
+            {
+                id = (short)_pageNames.Count;
+                _pageNames.Add(page);
+                _pageIds[page] = id;
+            }
+        }
+
+        _page = id;
+    }
+
+    /// <summary>The name a frame's <see cref="FrameSample.Page"/> stands for.</summary>
+    public string PageName(short id) => (uint)id < (uint)_pageNames.Count ? _pageNames[id] : "";
+
+    /// <summary>
+    /// One call of the game's web message handler that took <paramref name="ms"/>, in the frame being recorded. Only
+    /// slow calls are passed in, so the text is kept short: the message's command and its first 80 characters.
+    /// </summary>
+    public void NoteSlowMessage(long now, double ms, string? message)
+    {
+        if (!IsRecording) return;
+
+        SlowMessageCount++;
+
+        if (_slowMessages.Count == MaxSlowMessages) _slowMessages.RemoveAt(0);
+
+        _slowMessages.Add(new SlowMessage((now - _recordStart) / _ticksPerMs / 1000, FrameCount + 1, ms, SlowMessage.CommandOf(message), SlowMessage.HeadOf(message), Page));
+    }
 
     public int AddMod(ModInfo mod)
     {
@@ -159,6 +211,8 @@ public sealed class Recorder
 
         _hitches.Clear();
         _hitchCauses.Clear();
+        _slowMessages.Clear();
+        SlowMessageCount = 0;
         _ring.Clear();
         Game.Clear();
         _offThreadCalls.Clear();
@@ -241,12 +295,14 @@ public sealed class Recorder
 
         var frameMs = (now - _lastFrameEnd) / _ticksPerMs;
         var split = FoldFrame(frameMs);
-        var sample = new FrameSample((float)frameMs, (float)split.ModsMs, (float)split.HookMs, (float)split.GameMs, (float)split.AnalyzerMs, context.ManagedGcs, context.GameGcs, context.Engine, context.World);
+        var sample = new FrameSample((float)frameMs, (float)split.ModsMs, (float)split.HookMs, (float)split.GameMs, (float)split.AnalyzerMs, context.ManagedGcs, context.GameGcs, context.Engine, context.World, _page);
+        var atSeconds = (now - _recordStart) / _ticksPerMs / 1000;
 
         _lastFrameEnd = now;
         FrameCount++;
         _ring.Push(sample, _modFrameMs);
-        Game.Add((now - _recordStart) / _ticksPerMs / 1000, frameMs, frameMs >= HitchMs, context.Scene, context.World, context.Memory);
+        Game.Add(atSeconds, frameMs, frameMs >= HitchMs, context.Scene, context.World, context.Memory, Page);
+        NoteWorstCalls(atSeconds, sample, context.Scene);
 
         if (frameMs >= HitchMs) RecordHitch(now, sample, context);
 
@@ -264,6 +320,7 @@ public sealed class Recorder
         var totals = _probeTotals[probe];
 
         if (_frameCalls[probe] == 0) _touched.Add(probe);
+        if (totals.Calls == 0) totals.FirstCallTicks = total;
 
         _active[probe]--;
         _frameCalls[probe]++;
@@ -276,12 +333,30 @@ public sealed class Recorder
         // A probe inside itself (recursion) adds its total once, at the outermost call.
         if (_active[probe] == 0) totals.TotalTicks += total;
 
-        if (total > totals.MaxCallTicks) totals.MaxCallTicks = total;
+        if (total > totals.MaxCallTicks)
+        {
+            totals.MaxCallTicks = total;
+            totals.MaxCallThisFrame = true;
+        }
 
         if (_depth == 0) return;
 
         _stack[_depth - 1].ChildTicks += total;
         _stack[_depth - 1].ChildAlloc += alloc;
+    }
+
+    /// <summary>Where and in what frame each probe's slowest call so far happened, for the probes whose record this frame broke.</summary>
+    private void NoteWorstCalls(double atSeconds, FrameSample sample, string? scene)
+    {
+        foreach (var probe in _touched)
+        {
+            var totals = _probeTotals[probe];
+
+            if (!totals.MaxCallThisFrame) continue;
+
+            totals.MaxCallThisFrame = false;
+            totals.MaxCall = new WorstCall(atSeconds, FrameCount, scene ?? "", Page, sample);
+        }
     }
 
     private FrameSplit FoldFrame(double frameMs)
@@ -363,10 +438,13 @@ public sealed class Recorder
 
         if (_hitches.Count == MaxHitches) _hitches.RemoveAt(0);
 
-        var hitch = new Hitch(HitchCount, (now - _recordStart) / _ticksPerMs / 1000, FrameCount, sample, probes, mods, context.Scene);
+        var hitch = new Hitch(HitchCount, (now - _recordStart) / _ticksPerMs / 1000, FrameCount, sample, probes, mods, context.Scene, Page);
         var cause = Analysis.Cause(this, hitch);
         var causeMod = Analysis.CauseMod(hitch);
 
+        // Worked out once here, so the panel's half-second refresh does not rebuild the strings for every hitch.
+        hitch.CauseText = cause;
+        hitch.MethodText = Analysis.TopMethod(this, hitch);
         _hitches.Add(hitch);
         _hitchCauses.TryGetValue(cause, out var count);
         _hitchCauses[cause] = count + 1;
@@ -388,6 +466,7 @@ public sealed class Recorder
     {
         foreach (var probe in _touched)
         {
+            _probeTotals[probe].MaxCallThisFrame = false;
             _frameSelf[probe] = 0;
             _frameAlloc[probe] = 0;
             _frameCalls[probe] = 0;
@@ -441,10 +520,21 @@ public sealed class ProbeTotals
     public long Frames;
     public double WorstFrameMs;
 
+    /// <summary>The first call's length; often the slowest, since it pays for loading and first-time setup.</summary>
+    public long FirstCallTicks;
+
+    /// <summary>Where the slowest call happened. Kept after its frame leaves the window.</summary>
+    public WorstCall MaxCall = WorstCall.None;
+
+    /// <summary>Set when a call in the frame being recorded beat <see cref="MaxCallTicks"/>; cleared at the frame's end.</summary>
+    internal bool MaxCallThisFrame;
+
     public void Clear()
     {
-        Calls = SelfTicks = TotalTicks = AllocBytes = MaxCallTicks = Frames = 0;
+        Calls = SelfTicks = TotalTicks = AllocBytes = MaxCallTicks = Frames = FirstCallTicks = 0;
         WorstFrameMs = 0;
+        MaxCall = WorstCall.None;
+        MaxCallThisFrame = false;
     }
 }
 
@@ -476,7 +566,8 @@ public readonly record struct FrameContext(short ManagedGcs, short GameGcs, Engi
 /// <summary>Milliseconds from the engine's frame timing, all zero when the game does not collect them.</summary>
 public readonly record struct EngineTimes(float MainThreadMs, float RenderThreadMs, float GpuMs);
 
-public readonly record struct FrameSample(float Ms, float ModsMs, float HookMs, float GameMs, float AnalyzerMs, short ManagedGcs, short GameGcs, EngineTimes Engine, WorldReading World = default)
+/// <param name="Page">The page showing, as an id for <see cref="Recorder.PageName"/>; 0 when unknown.</param>
+public readonly record struct FrameSample(float Ms, float ModsMs, float HookMs, float GameMs, float AnalyzerMs, short ManagedGcs, short GameGcs, EngineTimes Engine, WorldReading World = default, short Page = 0)
 {
     /// <summary>Time no probe saw: the game's own work outside hooked methods, rendering and waiting.</summary>
     public float RestMs => Math.Max(0, Ms - ModsMs - HookMs - GameMs - AnalyzerMs);
@@ -487,4 +578,50 @@ public readonly record struct HitchEntry(int Id, double Ms, int Calls);
 
 /// <param name="Number">Counts from 1 since the last reset, and keeps counting when old hitches are dropped.</param>
 /// <param name="AtSeconds">Seconds into the recording.</param>
-public sealed record Hitch(long Number, double AtSeconds, long Frame, FrameSample Sample, List<HitchEntry> TopProbes, List<HitchEntry> TopMods, string Scene);
+/// <param name="Page">The game page that was showing, "" when the web probe had not said.</param>
+public sealed record Hitch(long Number, double AtSeconds, long Frame, FrameSample Sample, List<HitchEntry> TopProbes, List<HitchEntry> TopMods, string Scene, string Page = "")
+{
+    /// <summary>The most likely cause, set when the hitch is recorded; "" on a hitch made outside the recorder.</summary>
+    public string CauseText { get; internal set; } = "";
+
+    /// <summary>The slowest method with its mod when it took a fifth of the frame, set when the hitch is recorded.</summary>
+    public string MethodText { get; internal set; } = "";
+}
+
+/// <summary>Where a probe's slowest call happened.</summary>
+/// <param name="AtSeconds">Seconds into the recording.</param>
+/// <param name="Frame">The frame number, counted like <see cref="Hitch.Frame"/>.</param>
+/// <param name="Sample">That whole frame's breakdown.</param>
+public sealed record WorstCall(double AtSeconds, long Frame, string Scene, string Page, FrameSample Sample)
+{
+    public static readonly WorstCall None = new(0, 0, "", "", default);
+
+    public bool IsNone => Frame == 0;
+}
+
+/// <summary>One slow call of the game's web message handler.</summary>
+/// <param name="Frame">The frame it ran in, counted like <see cref="Hitch.Frame"/>.</param>
+/// <param name="Command">The message's type, page and parameter, the parts before its data: "3 PhoneSMS open".</param>
+/// <param name="Head">The message's first 80 characters, with its separators shown as '|'.</param>
+public sealed record SlowMessage(double AtSeconds, long Frame, double Ms, string Command, string Head, string Page)
+{
+    /// <summary>The game splits a web message into 4 parts on this character: type id, page, parameter, data.</summary>
+    public const char Separator = (char)30;
+
+    public const int HeadLength = 80;
+
+    public static string CommandOf(string? message)
+    {
+        if (string.IsNullOrEmpty(message)) return "";
+
+        var parts = message.Split(Separator, 4);
+
+        if (parts.Length < 4) return Shorten(message, 40).Replace(Separator, '|');
+
+        return Shorten(string.Join(" ", parts, 0, 3).Trim(), 60);
+    }
+
+    public static string HeadOf(string? message) => string.IsNullOrEmpty(message) ? "" : Shorten(message, HeadLength).Replace(Separator, '|');
+
+    private static string Shorten(string text, int length) => text.Length <= length ? text : text.Substring(0, length);
+}

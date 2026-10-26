@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+- The Web tab now counts the timers, listeners and observers mods leave inside the game's own pages, not just the main page.
+- Exiled's Toolkit gets its own row in the Web tab. Its scripts used to count as the game's.
+- Long tasks in the menus now show how much of their time no mod's script explains, and which page was open.
+- Every frame and every second in the CSV files names the game page that was open, and so does each hitch.
+- With RemoteDebugging on, the analyzer reads the browser's own style, layout and script time each second. It shows in the Web tab, the report and the seconds file.
+- A slow message from a page to the game is listed with what it asked for, so a hitch with no mod to blame can still point at a page.
+- Each method shows its single slowest call with the frame, scene and page it was in, and how long its first call took. The report lists the 15 slowest calls of the recording.
+- The Web tab lists the elements and listeners of each game page.
+- The analyzer allocates less memory with the panel open. The Methods and Hitches tabs refresh once a second instead of twice.
+
 ## 0.4.0
 
 - Stutter makers: a short list of the mods that made frames slow on their own, with how often, their typical and worst time, and the method that did it. On the Overview, the Mods tab and in the report.
