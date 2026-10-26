@@ -280,6 +280,7 @@ public class GameStatsTests
 
         Assert.Contains($"{"textures",-20} {"n/a",9}", text);
         Assert.Contains("1x 67%, 2x 33%", text);
+        Assert.Matches(@"Slow frames cost \d+\.\d s of game time over \d+ frames", text);
         Assert.Contains("Map", text);
         Assert.Contains("the game itself slowed down", text);
         Assert.All(text, c => Assert.True(c < 128, "non-ASCII character in the report: " + (int)c));

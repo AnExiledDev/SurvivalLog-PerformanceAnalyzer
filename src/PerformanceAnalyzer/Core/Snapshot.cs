@@ -66,9 +66,20 @@ public static class Snapshot
                 WriteSpeeds(json, recorder.Game);
             }
 
-            if (input.Tab is PanelTab.Overview or PanelTab.Mods) WriteMods(json, Analysis.ModRows(recorder, seconds), input.Tab == PanelTab.Overview ? 6 : int.MaxValue);
-            if (input.Tab == PanelTab.Methods) WriteMethods(json, Analysis.MethodRows(recorder, MethodLimit));
-            if (input.Tab == PanelTab.Hitches) WriteHitches(json, recorder);
+            if (input.Tab is PanelTab.Overview or PanelTab.Mods)
+            {
+                WriteMods(json, Analysis.ModRows(recorder, seconds), input.Tab == PanelTab.Overview ? 6 : int.MaxValue);
+                WriteStutters(json, Analysis.StutterMakers(recorder, seconds), input.Tab == PanelTab.Overview ? 3 : int.MaxValue);
+            }
+
+            if (input.Tab == PanelTab.Methods) WriteMethods(json, Analysis.MethodRows(recorder, MethodLimit), seconds);
+
+            if (input.Tab == PanelTab.Hitches)
+            {
+                WriteHitchGroups(json, Analysis.HitchGroups(recorder));
+                json.WriteNumber("hitchesKept", recorder.Hitches.Count);
+                WriteHitches(json, recorder);
+            }
             if (input.Tab == PanelTab.Web) WriteScripts(json, input.Scripts, seconds);
 
             json.WriteEndObject();
@@ -295,13 +306,55 @@ public static class Snapshot
             json.WriteNumber("probes", row.Probes);
             json.WriteNumber("calls", row.Calls);
             json.WriteBoolean("self", row.Id == Recorder.AnalyzerMod);
+            json.WriteString("rating", Analysis.Label(row.Rating));
+            json.WriteBoolean("idle", row.Idle);
             json.WriteEndObject();
         }
 
         json.WriteEndArray();
     }
 
-    private static void WriteMethods(Utf8JsonWriter json, List<MethodRow> rows)
+    private static void WriteStutters(Utf8JsonWriter json, List<StutterRow> rows, int limit)
+    {
+        json.WriteStartArray("stutters");
+
+        foreach (var row in rows)
+        {
+            if (limit-- <= 0) break;
+
+            json.WriteStartObject();
+            json.WriteString("name", row.Mod.Name);
+            json.WriteString("rating", Analysis.Label(row.Rating));
+            json.WriteNumber("caused", row.CausedHitches);
+            Number(json, "typical", row.TypicalMs, 1);
+            Number(json, "worst", row.WorstMs, 1);
+            json.WriteString("method", row.Method);
+            json.WriteEndObject();
+        }
+
+        json.WriteEndArray();
+    }
+
+    private static void WriteHitchGroups(Utf8JsonWriter json, List<HitchGroup> groups)
+    {
+        json.WriteStartArray("hitchGroups");
+
+        foreach (var g in groups.Take(20))
+        {
+            json.WriteStartObject();
+            json.WriteString("cause", g.Cause);
+            json.WriteString("method", g.Method);
+            json.WriteNumber("count", g.Count);
+            Number(json, "typical", g.TypicalMs, 1);
+            Number(json, "worst", g.WorstMs, 1);
+            json.WriteNumber("worstN", g.WorstNumber);
+            json.WriteEndObject();
+        }
+
+        json.WriteEndArray();
+    }
+
+    private static void WriteMethods(Utf8JsonWriter json, List<MethodRow> rows, double seconds)
     {
         json.WriteStartArray("methods");
 
@@ -320,6 +373,8 @@ public static class Snapshot
             Number(json, "maxCall", row.MaxCallMs, 3);
             Number(json, "worstFrame", row.WorstFrameMs, 3);
             Number(json, "allocKb", row.AllocKb);
+            Number(json, "allocKbS", seconds > 0 ? row.AllocKb / seconds : 0);
+            json.WriteBoolean("game", row.Probe.Kind == ProbeKind.Game);
             json.WriteNumber("offThread", row.OffThreadCalls);
             json.WriteEndObject();
         }
@@ -345,6 +400,7 @@ public static class Snapshot
             Number(json, "mods", sample.ModsMs);
             Number(json, "hook", sample.HookMs);
             Number(json, "game", sample.GameMs);
+            Number(json, "analyzer", sample.AnalyzerMs);
             Number(json, "rest", sample.RestMs);
             json.WriteNumber("gcManaged", sample.ManagedGcs);
             json.WriteNumber("gcGame", sample.GameGcs);

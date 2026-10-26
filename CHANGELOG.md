@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- Stutter makers: a short list of the mods that made frames slow on their own, with how often, their typical and worst time, and the method that did it. On the Overview, the Mods tab and in the report.
+- Hitches are grouped by cause and slowest method ("Mod A, PageTick postfix: 57 hitches, typical 40 ms, worst 114"). The report lists the 10 worst hitches instead of the latest 15.
+- Each hitch now shows the analyzer's own time, so its parts add up to the frame.
+- Every mod gets a rating: fine, watch or heavy. Mods that never took measurable time are folded into one line.
+- The verdict names up to three stutter makers instead of one.
+- Mod methods and the game's own code inside hooks are listed apart (Methods tab buttons, two report tables). Allocations read as KB/s or MB/s.
+- The game clock section of the report is written as plain sentences.
+
 ## 0.3.0
 
 - Markers: a mod can time a section of its own code. Copy `markers/PerfMarkers.cs` into the mod and wrap the code in `using (marker.Time())`. Each section shows as its own row in the Methods tab, the report and the stutter list, and does nothing for players without the analyzer.

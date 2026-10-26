@@ -20,7 +20,46 @@ public sealed record InstrumentStatus(int Hooks, int Patches, int Tickers, int D
 
 /// <summary>One mod's line in the Mods table.</summary>
 /// <param name="CausedHitches">Hitches where this mod took 40% of the frame or more on its own.</param>
-public sealed record ModRow(int Id, ModInfo Mod, double AvgMs, double P99Ms, double WorstMs, double SharePercent, double AllocKbPerSecond, long CausedHitches, int Probes, long Calls);
+/// <param name="Rating">How much a player would notice the mod: fine, watch or heavy.</param>
+public sealed record ModRow(int Id, ModInfo Mod, double AvgMs, double P99Ms, double WorstMs, double SharePercent, double AllocKbPerSecond, long CausedHitches, int Probes, long Calls, Rating Rating)
+{
+    /// <summary>Hooked or timed, but it never took a measurable amount of time.</summary>
+    public bool Idle => AvgMs < 0.0005 && WorstMs < 0.01 && CausedHitches == 0;
+}
+
+/// <summary>How much a player would notice a mod.</summary>
+public enum Rating
+{
+    /// <summary>Cheap and steady.</summary>
+    Fine,
+
+    /// <summary>A noticeable cost per frame, or a slow frame now and then.</summary>
+    Watch,
+
+    /// <summary>A large cost every frame, or stutters of its own.</summary>
+    Heavy,
+}
+
+/// <summary>A mod that made frames slow on its own, with the method that did it.</summary>
+/// <param name="TypicalMs">The mod's median time in the stutters it caused; its worst frame when it caused none.</param>
+/// <param name="Method">The mod's method that was slowest most often in those frames, or its slowest frame's method.</param>
+public sealed record StutterRow(int Id, ModInfo Mod, long CausedHitches, double TypicalMs, double WorstMs, string Method, Rating Rating);
+
+/// <summary>Kept hitches with the same cause and the same slowest method.</summary>
+/// <param name="Method">The method that took a fifth of the frame or more, with its mod; "" when none did.</param>
+public sealed record HitchGroup(string Cause, string Method, int Count, double TypicalMs, double WorstMs, long WorstNumber);
+
+/// <summary>Which methods a Methods list holds.</summary>
+public enum MethodSide
+{
+    All,
+
+    /// <summary>Everything but the game's own code inside hooked methods.</summary>
+    Mods,
+
+    /// <summary>Only the game's own code inside hooked methods.</summary>
+    Game,
+}
 
 /// <summary>One probe's line in the Methods table.</summary>
 public sealed record MethodRow(int Id, ProbeInfo Probe, string OwnerNames, long Calls, double CallsPerFrame, double SelfMsPerFrame, double TotalMs, double SelfMs, double MaxCallMs, double WorstFrameMs, double AllocKb, long OffThreadCalls);
@@ -89,7 +128,7 @@ public static class Analysis
             var share = meanFrame > 0 ? 100 * avg / meanFrame : 0;
             var allocPerSecond = recordedSeconds > 0 ? totals.AllocBytes / 1024.0 / recordedSeconds : 0;
 
-            rows.Add(new ModRow(mod, recorder.Mods[mod], avg, p99, totals.WorstFrameMs, share, allocPerSecond, totals.CausedHitches, probeCounts[mod], calls[mod]));
+            rows.Add(new ModRow(mod, recorder.Mods[mod], avg, p99, totals.WorstFrameMs, share, allocPerSecond, totals.CausedHitches, probeCounts[mod], calls[mod], Rate(avg, p99, totals.WorstFrameMs, totals.CausedHitches, recorder.HitchMs)));
         }
 
         rows.Sort((a, b) => b.AvgMs.CompareTo(a.AvgMs));
@@ -97,8 +136,135 @@ public static class Analysis
         return rows;
     }
 
+    /// <summary>
+    /// Heavy: a millisecond or more every frame, three stutters of its own, or one frame as slow as a hitch. Watch: a
+    /// quarter of a millisecond a frame, any stutter, half a hitch in one frame, or 2 ms in its slowest 1% of frames.
+    /// </summary>
+    public static Rating Rate(double avgMs, double p99Ms, double worstMs, long caused, double hitchMs)
+    {
+        if (avgMs >= 1 || caused >= 3 || worstMs >= hitchMs) return Rating.Heavy;
+        if (avgMs >= 0.25 || caused > 0 || worstMs >= hitchMs / 2 || p99Ms >= 2) return Rating.Watch;
+
+        return Rating.Fine;
+    }
+
+    public static string Label(Rating rating) => rating switch
+    {
+        Rating.Heavy => "heavy",
+        Rating.Watch => "watch",
+        _ => "fine",
+    };
+
+    /// <summary>
+    /// Mods (not the analyzer) that caused a stutter or took half a hitch in one frame, most stutters first. The
+    /// method and typical time come from the hitches still kept.
+    /// </summary>
+    public static List<StutterRow> StutterMakers(Recorder recorder, double recordedSeconds)
+    {
+        var rows = new List<StutterRow>();
+
+        foreach (var mod in ModRows(recorder, recordedSeconds))
+        {
+            if (mod.Id == Recorder.AnalyzerMod) continue;
+            if (mod.CausedHitches == 0 && mod.WorstMs < recorder.HitchMs / 2) continue;
+
+            var times = new List<double>();
+            var methods = new Dictionary<int, int>();
+
+            foreach (var hitch in recorder.Hitches)
+            {
+                if (CauseMod(hitch) != mod.Id) continue;
+
+                times.Add(hitch.TopMods[0].Ms);
+
+                foreach (var entry in hitch.TopProbes)
+                {
+                    if (Array.IndexOf(recorder.Probes[entry.Id].Owners, mod.Id) < 0) continue;
+
+                    methods.TryGetValue(entry.Id, out var n);
+                    methods[entry.Id] = n + 1;
+
+                    break;
+                }
+            }
+
+            var method = methods.Count > 0 ? methods.OrderByDescending(p => p.Value).ThenBy(p => p.Key).First().Key : SlowestProbe(recorder, mod.Id);
+            var typical = times.Count > 0 ? Median(times) : mod.WorstMs;
+
+            rows.Add(new StutterRow(mod.Id, mod.Mod, mod.CausedHitches, typical, mod.WorstMs, method < 0 ? "" : MethodName(recorder.Probes[method]), mod.Rating));
+        }
+
+        rows.Sort((a, b) => b.CausedHitches != a.CausedHitches ? b.CausedHitches.CompareTo(a.CausedHitches) : b.WorstMs.CompareTo(a.WorstMs));
+
+        return rows;
+    }
+
+    /// <summary>The kept hitches grouped by cause and slowest method, most frequent first.</summary>
+    public static List<HitchGroup> HitchGroups(Recorder recorder)
+    {
+        var groups = new Dictionary<(string Cause, string Method), List<Hitch>>();
+
+        foreach (var hitch in recorder.Hitches)
+        {
+            var key = (Cause(recorder, hitch), TopMethod(recorder, hitch));
+
+            if (!groups.TryGetValue(key, out var list)) groups[key] = list = new List<Hitch>();
+
+            list.Add(hitch);
+        }
+
+        var rows = groups.Select(g =>
+        {
+            var worst = g.Value.OrderByDescending(h => h.Sample.Ms).First();
+
+            return new HitchGroup(g.Key.Cause, g.Key.Method, g.Value.Count, Median(g.Value.Select(h => (double)h.Sample.Ms).ToList()), worst.Sample.Ms, worst.Number);
+        }).ToList();
+
+        rows.Sort((a, b) => b.Count != a.Count ? b.Count.CompareTo(a.Count) : b.WorstMs.CompareTo(a.WorstMs));
+
+        return rows;
+    }
+
+    /// <summary>The kept hitches, slowest first.</summary>
+    public static List<Hitch> WorstHitches(Recorder recorder, int limit) => recorder.Hitches.OrderByDescending(h => h.Sample.Ms).ThenBy(h => h.Number).Take(limit).ToList();
+
+    /// <summary>"Type.Method", with the kind when it is a patch: "StatsUI.PageTick postfix".</summary>
+    public static string MethodName(ProbeInfo probe) => probe.Kind is ProbeKind.Prefix or ProbeKind.Postfix or ProbeKind.Finalizer ? probe.Name + " " + ProbeKinds.Label(probe.Kind) : probe.Name;
+
+    /// <summary>The frame's slowest method with its mod, when it took a fifth of the frame or more; "" otherwise.</summary>
+    private static string TopMethod(Recorder recorder, Hitch hitch)
+    {
+        if (hitch.TopProbes.Count == 0 || hitch.TopProbes[0].Ms < hitch.Sample.Ms * 0.2) return "";
+
+        var probe = recorder.Probes[hitch.TopProbes[0].Id];
+
+        return MethodName(probe) + " (" + recorder.Mods[probe.Owners[0]].Name + ")";
+    }
+
+    private static int SlowestProbe(Recorder recorder, int mod)
+    {
+        var best = -1;
+
+        for (var p = 0; p < recorder.Probes.Count; p++)
+        {
+            if (Array.IndexOf(recorder.Probes[p].Owners, mod) < 0) continue;
+            if (best < 0 || recorder.ProbeTotals[p].WorstFrameMs > recorder.ProbeTotals[best].WorstFrameMs) best = p;
+        }
+
+        return best;
+    }
+
+    private static double Median(List<double> values)
+    {
+        values.Sort();
+
+        var mid = values.Count / 2;
+
+        return values.Count % 2 == 1 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+    }
+
     /// <summary>Probes that ran at least once, by self time, filtered to one mod when <paramref name="modKey"/> is set.</summary>
-    public static List<MethodRow> MethodRows(Recorder recorder, int limit, string modKey = "")
+    public static List<MethodRow> MethodRows(Recorder recorder, int limit, string modKey = "", MethodSide side = MethodSide.All)
     {
         var frames = Math.Max(1, recorder.FrameCount);
         var tpm = recorder.TicksPerMs;
@@ -112,6 +278,8 @@ public static class Analysis
 
             if (totals.Calls == 0 && offThread == 0) continue;
             if (modKey.Length > 0 && !probe.Owners.Any(o => recorder.Mods[o].Key == modKey)) continue;
+            if (side == MethodSide.Mods && probe.Kind == ProbeKind.Game) continue;
+            if (side == MethodSide.Game && probe.Kind != ProbeKind.Game) continue;
 
             var owners = string.Join(", ", probe.Owners.Select(o => recorder.Mods[o].Name));
 
@@ -151,9 +319,9 @@ public static class Analysis
 
         if (mods.Count > 0 && mods[0].AvgMs >= 0.25) lines.Add($"The heaviest mod is {mods[0].Mod.Name}, at {mods[0].AvgMs:0.00} ms per frame on average.");
 
-        var spiky = mods.Where(m => m.WorstMs >= recorder.HitchMs / 2).OrderByDescending(m => m.WorstMs).FirstOrDefault();
+        var stutters = StutterMakers(recorder, recordedSeconds);
 
-        if (spiky != null) lines.Add($"{spiky.Mod.Name} had a single frame where it took {spiky.WorstMs:0} ms on its own, which is felt as a stutter.");
+        if (stutters.Count > 0) lines.Add("Stutters come from " + string.Join("; ", stutters.Take(3).Select(StutterText)) + ".");
 
         lines.AddRange(GameVerdict(recorder));
         lines.AddRange(HitchVerdict(recorder));
@@ -239,6 +407,13 @@ public static class Analysis
         if (sample.ModsMs + sample.HookMs >= sample.Ms * 0.4) return "several mods together";
 
         return "the game itself (no mod was busy)";
+    }
+
+    private static string StutterText(StutterRow row)
+    {
+        var count = row.CausedHitches > 0 ? $"{row.CausedHitches} stutter{(row.CausedHitches == 1 ? "" : "s")}, worst {row.WorstMs:0} ms" : $"one frame of {row.WorstMs:0} ms";
+
+        return row.Method.Length > 0 ? $"{row.Mod.Name} ({count}, in {row.Method})" : $"{row.Mod.Name} ({count})";
     }
 
     private static string Percent(double fraction) => $"{fraction * 100:0}%";

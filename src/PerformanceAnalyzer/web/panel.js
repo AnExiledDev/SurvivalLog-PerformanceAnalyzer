@@ -38,16 +38,19 @@
     '<div id="toast" hidden></div>' +
     '</div>';
 
-  const state = { open: false, tab: 'overview', key: '', version: '', snap: null, report: '', sort: { methods: ['selfPerFrame', false], mods: ['avg', false] }, filter: '', toastTimer: 0 };
+  const state = { open: false, tab: 'overview', key: '', version: '', snap: null, report: '', sort: { methods: ['selfPerFrame', false], mods: ['avg', false] }, filter: '', side: 'mods', toastTimer: 0 };
+  const RATING = { fine: 'good', watch: 'warn', heavy: 'bad' };
+  const rating = (r) => `<td class="${RATING[r] || ''}">${esc(r || '')}</td>`;
 
   $('#tabs').innerHTML = TABS.map(([key, label]) => `<button data-tab="${key}">${label}</button>`).join('');
 
   root.addEventListener('click', (e) => {
-    const el = e.target.closest ? e.target.closest('[data-act],[data-tab],[data-deep],[data-sort]') : null;
+    const el = e.target.closest ? e.target.closest('[data-act],[data-tab],[data-deep],[data-sort],[data-side]') : null;
 
     if (!el) return;
 
     if (el.dataset.tab) return showTab(el.dataset.tab, true);
+    if (el.dataset.side) { state.side = el.dataset.side; return drawMethods(false); }
     if (el.dataset.deep !== undefined) return send('deep|' + el.dataset.deep);
     if (el.dataset.sort) return sortBy(el.dataset.sort);
 
@@ -148,7 +151,7 @@
     const parts = [['mods', 'Mods', s.mods], ['hook', 'Hook overhead', s.hook], ['game', 'Game code in hooks', s.game], ['analyzer', 'This analyzer', s.analyzer], ['rest', 'Rest of the frame', s.rest]];
     const bar = parts.map(([cls, label, v]) => `<i class="${cls}" style="width:${(100 * (v || 0) / total).toFixed(2)}%" title="${label}: ${F.ms(v)} ms"></i>`).join('');
     const legend = parts.map(([cls, label, v]) => `<span><i class="${cls}"></i>${label} <b>${F.ms(v)} ms</b></span>`).join('');
-    const mods = (snap.mods || []).map((m) => `<tr><td>${esc(m.name)}${m.self ? ' <em>(this tool)</em>' : ''}</td><td class="n ${F.costClass(m.avg)}">${F.ms(m.avg)}</td><td class="n">${F.ms(m.p99)}</td><td class="n">${F.ms(m.worst)}</td><td class="n">${F.percent(m.share)}</td></tr>`).join('');
+    const mods = (snap.mods || []).filter((m) => !m.idle).map((m) => `<tr><td>${esc(m.name)}${m.self ? ' <em>(this tool)</em>' : ''}</td>${rating(m.rating)}<td class="n ${F.costClass(m.avg)}">${F.ms(m.avg)}</td><td class="n">${F.ms(m.p99)}</td><td class="n">${F.ms(m.worst)}</td><td class="n">${F.percent(m.share)}</td></tr>`).join('');
 
     $('#main').innerHTML =
       `<section class="verdict">${verdict}</section>` +
@@ -163,7 +166,17 @@
       '</section>' +
       `<section><h3>Where an average frame goes <span class="dim">(${F.ms(s.frame)} ms)</span></h3><div class="split">${bar}</div><div class="legend">${legend}</div></section>` +
       `<section><h3>Frame time, last ${(snap.graph && snap.graph.ms ? snap.graph.ms.length : 0)} frames</h3>${graph(snap.graph)}</section>` +
-      `<section><h3>Mods costing the most</h3><table><tr><th>Mod</th><th class="n">ms / frame</th><th class="n">99th</th><th class="n">worst frame</th><th class="n">share</th></tr>${mods || '<tr><td colspan="5" class="dim">No mod has run any timed code yet.</td></tr>'}</table></section>`;
+      stutterSection(snap.stutters, 'Stutter makers') +
+      `<section><h3>Mods costing the most</h3><table><tr><th>Mod</th><th>rating</th><th class="n">ms / frame</th><th class="n">99th</th><th class="n">worst frame</th><th class="n">share</th></tr>${mods || '<tr><td colspan="6" class="dim">No mod has run any timed code yet.</td></tr>'}</table></section>`;
+  }
+
+  // Mods that made frames slow on their own, with the method that did it. Empty when none did.
+  function stutterSection(list, title) {
+    const rows = (list || []).map((s) => `<tr><td>${esc(s.name)}</td>${rating(s.rating)}<td class="n">${F.count(s.caused)}</td><td class="n">${F.ms(s.typical)}</td><td class="n ${F.frameClass(s.worst)}">${F.ms(s.worst)}</td><td class="name">${esc(s.method)}</td></tr>`).join('');
+
+    if (!rows) return '';
+
+    return `<section><h3>${title}</h3><table><tr><th>Mod</th><th>rating</th><th class="n">stutters</th><th class="n">typical ms</th><th class="n">worst ms</th><th>slowest method</th></tr>${rows}</table></section>`;
   }
 
   // The game side on the Overview: logic updates and the process's memory. The Game tab has the rest.
@@ -260,17 +273,20 @@
 
   function drawMods(snap) {
     const [field, ascending] = state.sort.mods;
-    const rows = F.sortRows(snap.mods || [], field, ascending);
+    const rows = F.sortRows((snap.mods || []).filter((m) => !m.idle), field, ascending);
+    const idle = (snap.mods || []).filter((m) => m.idle).map((m) => esc(m.name));
     const deep = (snap.status && snap.status.deepMod) || '';
-    const cols = [['name', 'Mod'], ['avg', 'ms / frame', 1], ['p99', '99th', 1], ['worst', 'worst frame', 1], ['share', 'share', 1], ['allocKbS', 'alloc / s', 1], ['hitches', 'hitches caused', 1], ['probes', 'timed', 1], ['calls', 'calls', 1]];
-    const body = rows.map((m) => `<tr><td>${esc(m.name)} <span class="dim">${esc(m.version)}</span>${m.self ? ' <em>(this tool)</em>' : ''}</td>` +
+    const cols = [['name', 'Mod'], ['rating', 'rating'], ['avg', 'ms / frame', 1], ['p99', '99th', 1], ['worst', 'worst frame', 1], ['share', 'share', 1], ['allocKbS', 'alloc / s', 1], ['hitches', 'hitches caused', 1], ['probes', 'timed', 1], ['calls', 'calls', 1]];
+    const body = rows.map((m) => `<tr><td>${esc(m.name)} <span class="dim">${esc(m.version)}</span>${m.self ? ' <em>(this tool)</em>' : ''}</td>${rating(m.rating)}` +
       `<td class="n ${F.costClass(m.avg)}">${F.ms(m.avg)}</td><td class="n">${F.ms(m.p99)}</td><td class="n">${F.ms(m.worst)}</td><td class="n">${F.percent(m.share)}</td>` +
-      `<td class="n">${F.kb(m.allocKbS)}</td><td class="n">${F.count(m.hitches)}</td><td class="n">${F.count(m.probes)}</td><td class="n">${F.count(m.calls)}</td>` +
+      `<td class="n">${F.kb(m.allocKbS)}/s</td><td class="n">${F.count(m.hitches)}</td><td class="n">${F.count(m.probes)}</td><td class="n">${F.count(m.calls)}</td>` +
       `<td>${m.self ? '' : deep === m.key ? '<button data-deep="" class="on" title="Stop timing every method of this mod">Deep on</button>' : `<button data-deep="${esc(m.key)}" title="Time every method of this mod, not only its hooks and updates">Deep</button>`}</td></tr>`).join('');
 
     $('#main').innerHTML =
-      '<p class="dim">Time each mod spent in its own code per frame, averaged over every recorded frame. "In hitches" counts slow frames where the mod ran. Deep times every method of one mod, so the Methods tab shows what inside it is slow; it adds overhead to that mod while on.</p>' +
-      `<table class="wide">${header('mods', cols)}${body || '<tr><td colspan="10" class="dim">No mod has run any timed code yet.</td></tr>'}</table>`;
+      stutterSection(snap.stutters, 'Stutter makers: mods that made frames slow on their own') +
+      '<p class="dim">Time each mod spent in its own code per frame, averaged over every recorded frame. "Hitches caused" counts slow frames where the mod took 40% of the frame or more. Rating: heavy is 1 ms a frame or more, 3 stutters, or one frame as slow as a hitch; watch is 0.25 ms a frame, any stutter, a frame of half a hitch, or 2 ms in its slowest 1% of frames. Deep times every method of one mod, so the Methods tab shows what inside it is slow; it adds overhead to that mod while on.</p>' +
+      `<table class="wide">${header('mods', cols)}${body || '<tr><td colspan="11" class="dim">No mod has run any timed code yet.</td></tr>'}</table>` +
+      (idle.length ? `<p class="dim">${idle.length} more with no measurable time: ${idle.join(', ')}</p>` : '');
   }
 
   function drawMethods(keepFocus) {
@@ -279,17 +295,19 @@
     if (!snap || state.tab !== 'methods') return;
 
     const [field, ascending] = state.sort.methods;
-    const rows = F.sortRows(F.filterRows(snap.methods || [], state.filter, ['name', 'kind', 'target', 'owners']), field, ascending);
-    const cols = [['name', 'Method'], ['kind', 'Kind'], ['owners', 'Mod'], ['perFrame', 'calls / frame', 1], ['selfPerFrame', 'self ms / frame', 1], ['self', 'self ms', 1], ['total', 'total ms', 1], ['maxCall', 'slowest call', 1], ['worstFrame', 'worst frame', 1], ['allocKb', 'alloc', 1], ['offThread', 'off thread', 1]];
+    const side = (snap.methods || []).filter((m) => state.side === 'all' || (state.side === 'game') === !!m.game);
+    const rows = F.sortRows(F.filterRows(side, state.filter, ['name', 'kind', 'target', 'owners']), field, ascending);
+    const cols = [['name', 'Method'], ['kind', 'Kind'], ['owners', 'Mod'], ['perFrame', 'calls / frame', 1], ['selfPerFrame', 'self ms / frame', 1], ['self', 'self ms', 1], ['total', 'total ms', 1], ['maxCall', 'slowest call', 1], ['worstFrame', 'worst frame', 1], ['allocKbS', 'alloc / s', 1], ['offThread', 'off thread', 1]];
+    const sides = [['mods', 'Mod code'], ['game', 'Game code in hooks'], ['all', 'All']].map(([key, label]) => `<button data-side="${key}" class="${state.side === key ? 'on' : ''}">${label}</button>`).join('');
     const body = rows.slice(0, 300).map((m) => `<tr title="${esc(m.target ? 'on ' + m.target : '')}"><td class="name">${esc(m.name)}</td><td>${esc(m.kind)}</td><td>${esc(m.owners)}</td>` +
       `<td class="n">${F.ms(m.perFrame)}</td><td class="n ${F.costClass(m.selfPerFrame)}">${F.ms(m.selfPerFrame)}</td><td class="n">${F.ms(m.self)}</td><td class="n">${F.ms(m.total)}</td>` +
-      `<td class="n">${F.ms(m.maxCall)}</td><td class="n">${F.ms(m.worstFrame)}</td><td class="n">${F.kb(m.allocKb)}</td><td class="n">${m.offThread ? F.count(m.offThread) : ''}</td></tr>`).join('');
+      `<td class="n">${F.ms(m.maxCall)}</td><td class="n">${F.ms(m.worstFrame)}</td><td class="n">${m.allocKbS ? F.kb(m.allocKbS) + '/s' : ''}</td><td class="n">${m.offThread ? F.count(m.offThread) : ''}</td></tr>`).join('');
     const table = `<table class="wide">${header('methods', cols)}${body || '<tr><td colspan="11" class="dim">Nothing timed matches.</td></tr>'}</table>`;
 
     if (keepFocus && $('#methods')) { $('#methods').innerHTML = table; return; }
 
     $('#main').innerHTML =
-      `<div class="bar"><input id="filter" placeholder="Filter by method, kind, target or mod" value="${esc(state.filter)}"><span class="dim">Self time leaves out timed code called inside. Hover a row for the method it hooks.</span></div>` +
+      `<div class="bar">${sides}<input id="filter" placeholder="Filter by method, kind, target or mod" value="${esc(state.filter)}"><span class="dim">Self time leaves out timed code called inside. Hover a row for the method it hooks.</span></div>` +
       `<div id="methods">${table}</div>`;
   }
 
@@ -303,13 +321,17 @@
 
       return `<article><h4><b class="${F.frameClass(h.ms)}">${F.ms(h.ms)} ms</b> #${h.n} at ${F.seconds(h.at)}${h.scene ? ' in ' + esc(h.scene) : ''}${gc}${engine}</h4>` +
         `<p>${esc(h.cause)}</p>` +
-        `<p class="dim">mods ${F.ms(h.mods)} ms, hook overhead ${F.ms(h.hook)} ms, game code in hooks ${F.ms(h.game)} ms, rest ${F.ms(h.rest)} ms</p>` +
+        `<p class="dim">mods ${F.ms(h.mods)} ms, hook overhead ${F.ms(h.hook)} ms, game code in hooks ${F.ms(h.game)} ms, this analyzer ${F.ms(h.analyzer)} ms, rest ${F.ms(h.rest)} ms</p>` +
         (mods ? `<div class="chips">${mods}</div>` : '') +
         (top ? `<table><tr><th>Slowest in this frame</th><th>Kind</th><th>Mod</th><th class="n">ms</th><th class="n">calls</th></tr>${top}</table>` : '') +
         '</article>';
     }).join('');
 
-    $('#main').innerHTML = `<p class="dim">Frames slower than ${F.ms(snap.hitchMs)} ms, newest first. "Rest" is time no probe saw: the game's own updates, rendering, loading, or garbage collection.</p>` + (cards || '<p class="dim">No hitches yet.</p>');
+    const groups = (snap.hitchGroups || []).map((g) => `<tr><td class="n">${F.count(g.count)}</td><td class="n">${F.ms(g.typical)}</td><td class="n ${F.frameClass(g.worst)}">${F.ms(g.worst)}</td><td class="n">#${g.worstN}</td><td>${esc(g.cause)}</td><td class="name">${esc(g.method)}</td></tr>`).join('');
+    const kept = snap.hitchesKept < snap.hitchCount ? ` <span class="dim">(the last ${F.count(snap.hitchesKept)} of ${F.count(snap.hitchCount)})</span>` : '';
+
+    $('#main').innerHTML = (groups ? `<section><h3>Hitches by cause${kept}</h3><table><tr><th class="n">count</th><th class="n">typical ms</th><th class="n">worst ms</th><th class="n">worst</th><th>Cause</th><th>Slowest method</th></tr>${groups}</table><p class="dim">Typical is the median frame time of the group. The slowest method is named when it took a fifth of the frame or more.</p></section>` : '') +
+      `<p class="dim">Frames slower than ${F.ms(snap.hitchMs)} ms, newest first. "Rest" is time no probe saw: the game's own updates, rendering, loading, or garbage collection.</p>` + (cards || '<p class="dim">No hitches yet.</p>');
   }
 
   function drawWeb(snap) {

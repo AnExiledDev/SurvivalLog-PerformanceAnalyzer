@@ -19,7 +19,9 @@ public sealed record ReportInput(long Now, DateTime At, string Version, string G
 public static class Report
 {
     private const int MethodLines = 40;
-    private const int HitchLines = 15;
+    private const int GameMethodLines = 15;
+    private const int HitchLines = 10;
+    private const int GroupLines = 15;
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
@@ -54,12 +56,16 @@ public static class Report
         Line(text, $"hitches (>= {recorder.HitchMs:0} ms): {recorder.HitchCount}");
         Line(text);
 
+        WriteStutters(text, Analysis.StutterMakers(recorder, seconds));
+        WriteHitchGroups(text, recorder);
+
         WriteGame(text, recorder.Game);
         WriteMemory(text, recorder.Game);
         WriteScenes(text, recorder.Game);
 
         WriteMods(text, Analysis.ModRows(recorder, seconds));
-        WriteMethods(text, Analysis.MethodRows(recorder, MethodLines));
+        WriteMethods(text, $"Slowest mod methods (top {MethodLines} by self time)", Analysis.MethodRows(recorder, MethodLines, side: MethodSide.Mods), seconds);
+        WriteMethods(text, $"Game code inside hooked methods (top {GameMethodLines})", Analysis.MethodRows(recorder, GameMethodLines, side: MethodSide.Game), seconds);
         WriteHitches(text, recorder);
         WriteScripts(text, input.Scripts, seconds);
         WriteWeb(text, input.WebJson);
@@ -122,21 +128,22 @@ public static class Report
             return;
         }
 
-        Line(text, "The game has no fixed tick: its world updates once per frame, so logic updates per second follow the frame rate.");
-
         if (game.HasWorld)
         {
-            Line(text, $"in a game {game.InGameMs / 1000:0} s, paused {game.PausedMs / 1000:0} s; logic updates {game.LogicPerSecond:0.0}/s while in a game");
-            Line(text, $"in-game clock: {game.ClockRate:0.0} game seconds per real second while running");
-            Line(text, "time at each game speed: " + string.Join(", ", game.SpeedMs.OrderBy(p => p.Key).Select(p => $"{p.Key:0.##}x {(game.InGameMs > 0 ? p.Value * 100 / game.InGameMs : 0):0}%")));
+            Line(text, $"In a game for {game.InGameMs / 1000:0} s, paused for {game.PausedMs / 1000:0} s of it.");
+            Line(text, $"The world updated {game.LogicPerSecond:0.0} times a second. It updates once per frame, so this follows the frame rate.");
+            Line(text, $"The in-game clock ran {game.ClockRate:0.0} game seconds per real second while not paused.");
+            Line(text, "Time at each game speed: " + string.Join(", ", game.SpeedMs.OrderBy(p => p.Key).Select(p => $"{p.Key:0.##}x {(game.InGameMs > 0 ? p.Value * 100 / game.InGameMs : 0):0}%")) + ".");
         }
         else
         {
-            Line(text, "no game was loaded while recording (menus only)");
+            Line(text, "No game was loaded while recording (menus only).");
         }
 
-        Line(text, $"physics steps {game.FixedPerSecond:0.0}/s (set to {(world.FixedDeltaSeconds > 0 ? 1 / world.FixedDeltaSeconds : 0):0}/s); engine time scale {world.TimeScale:0.###}, game speed {world.GameSpeed:0.##} at the end");
-        Line(text, $"game time lost to slow frames: {game.CappedMs / 1000:0.0} s over {game.CappedFrames} frames ({game.CappedPercent:0.0}% of game time); one frame may move the game at most {world.MaxDeltaSeconds * 1000:0} ms");
+        Line(text, $"Physics ran {game.FixedPerSecond:0.0} steps a second (set to {(world.FixedDeltaSeconds > 0 ? 1 / world.FixedDeltaSeconds : 0):0}). At the end: game speed {world.GameSpeed:0.##}x, engine time scale {world.TimeScale:0.###}.");
+        Line(text, game.CappedFrames > 0
+            ? $"Slow frames cost {game.CappedMs / 1000:0.0} s of game time over {game.CappedFrames} frames ({game.CappedPercent:0.0}%). One frame moves the game at most {world.MaxDeltaSeconds * 1000:0} ms, so a slower frame makes the game itself run slow."
+            : $"No game time was lost to slow frames (one frame moves the game at most {world.MaxDeltaSeconds * 1000:0} ms).");
         Line(text);
     }
 
@@ -207,19 +214,69 @@ public static class Report
             return;
         }
 
-        Line(text, $"{"mod",-30} {"ms/frame",9} {"p99 ms",8} {"worst ms",9} {"share",6} {"KB/s",8} {"caused",8} {"probes",7}");
+        Line(text, $"{"mod",-30} {"rating",6} {"ms/frame",9} {"p99 ms",8} {"worst ms",9} {"share",6} {"KB/s",8} {"caused",8} {"probes",7}");
 
-        foreach (var row in rows) Line(text, $"{Fit(row.Mod.Name + " " + row.Mod.Version, 30),-30} {row.AvgMs,9:0.000} {row.P99Ms,8:0.00} {row.WorstMs,9:0.00} {row.SharePercent,5:0.0}% {row.AllocKbPerSecond,8:0.0} {row.CausedHitches,8} {row.Probes,7}");
+        foreach (var row in rows.Where(r => !r.Idle)) Line(text, $"{Fit(row.Mod.Name + " " + row.Mod.Version, 30),-30} {Analysis.Label(row.Rating),6} {row.AvgMs,9:0.000} {row.P99Ms,8:0.00} {row.WorstMs,9:0.00} {row.SharePercent,5:0.0}% {row.AllocKbPerSecond,8:0.0} {row.CausedHitches,8} {row.Probes,7}");
 
+        var idle = rows.Where(r => r.Idle).ToList();
+
+        if (idle.Count > 0) Line(text, $"{idle.Count} more with no measurable time: " + string.Join(", ", idle.Select(r => r.Mod.Name)));
+
+        Line(text, "rating: heavy is 1 ms a frame or more, 3 stutters of its own, or one frame as slow as a hitch; watch is 0.25 ms a frame, any stutter, a frame of half a hitch, or p99 of 2 ms; fine is less.");
         Line(text, "KB/s is memory the mod's own code allocated on the mods' .NET runtime; the game's script heap is not counted here.");
         Line(text, "caused: hitches where the mod took 40% of the frame or more on its own. p99 is rounded down, by up to 6%.");
 
         Line(text);
     }
 
-    private static void WriteMethods(StringBuilder text, List<MethodRow> rows)
+    private static void WriteStutters(StringBuilder text, List<StutterRow> rows)
     {
-        Heading(text, $"Slowest methods (top {MethodLines} by self time)");
+        Heading(text, "Stutter makers (mods that made frames slow on their own)");
+
+        if (rows.Count == 0)
+        {
+            Line(text, "none");
+            Line(text);
+
+            return;
+        }
+
+        Line(text, $"{"mod",-30} {"rating",6} {"stutters",8} {"typical",8} {"worst ms",9}  method");
+
+        foreach (var row in rows) Line(text, $"{Fit(row.Mod.Name + " " + row.Mod.Version, 30),-30} {Analysis.Label(row.Rating),6} {row.CausedHitches,8} {row.TypicalMs,8:0.0} {row.WorstMs,9:0.0}  {row.Method}");
+
+        Line(text, "stutters: hitches where the mod took 40% of the frame or more. typical: the mod's median ms in those frames (its worst frame when it caused none). method: its slowest method most often.");
+        Line(text);
+    }
+
+    private static void WriteHitchGroups(StringBuilder text, Recorder recorder)
+    {
+        var groups = Analysis.HitchGroups(recorder);
+        var kept = recorder.Hitches.Count;
+
+        Heading(text, kept < recorder.HitchCount ? $"Hitches by cause (the last {kept} of {recorder.HitchCount})" : "Hitches by cause");
+
+        if (groups.Count == 0)
+        {
+            Line(text, "none");
+            Line(text);
+
+            return;
+        }
+
+        Line(text, $"{"count",6} {"typical",8} {"worst ms",9} {"worst",7}  cause, slowest method");
+
+        foreach (var g in groups.Take(GroupLines)) Line(text, $"{g.Count,6} {g.TypicalMs,8:0.0} {g.WorstMs,9:0.0} {"#" + g.WorstNumber,7}  {g.Cause}{(g.Method.Length > 0 ? ", " + g.Method : "")}");
+
+        if (groups.Count > GroupLines) Line(text, $"{groups.Count - GroupLines} more groups with fewer hitches");
+
+        Line(text, "typical: median frame time of the group. The slowest method is named when it took a fifth of the frame or more.");
+        Line(text);
+    }
+
+    private static void WriteMethods(StringBuilder text, string heading, List<MethodRow> rows, double seconds)
+    {
+        Heading(text, heading);
 
         if (rows.Count == 0)
         {
@@ -229,23 +286,34 @@ public static class Report
             return;
         }
 
-        Line(text, $"{"self ms",9} {"ms/frame",9} {"calls/frame",11} {"max call",9} {"KB",8}  kind       method (owner)");
+        Line(text, $"{"self ms",9} {"ms/frame",9} {"calls/frame",11} {"max call",9} {"alloc/s",9}  kind       method (owner)");
 
         foreach (var row in rows)
         {
             var target = row.Probe.Target.Length > 0 ? " on " + row.Probe.Target : "";
 
-            Line(text, $"{row.SelfMs,9:0.0} {row.SelfMsPerFrame,9:0.0000} {row.CallsPerFrame,11:0.0} {row.MaxCallMs,9:0.000} {row.AllocKb,8:0.0}  {ProbeKinds.Label(row.Probe.Kind),-10} {row.Probe.Name}{target} ({row.OwnerNames}){(row.OffThreadCalls > 0 ? $" [{row.OffThreadCalls} calls off the main thread, not timed]" : "")}");
+            Line(text, $"{row.SelfMs,9:0.0} {row.SelfMsPerFrame,9:0.0000} {row.CallsPerFrame,11:0.0} {row.MaxCallMs,9:0.000} {PerSecond(row.AllocKb, seconds),9}  {ProbeKinds.Label(row.Probe.Kind),-10} {row.Probe.Name}{target} ({row.OwnerNames}){(row.OffThreadCalls > 0 ? $" [{row.OffThreadCalls} calls off the main thread, not timed]" : "")}");
         }
 
         Line(text);
+    }
+
+    /// <summary>Kilobytes over the recording as a rate: "12 KB/s", "1.5 MB/s", "0" when nothing was allocated.</summary>
+    public static string PerSecond(double kb, double seconds)
+    {
+        var rate = seconds > 0 ? kb / seconds : 0;
+
+        if (rate <= 0) return "0";
+        if (rate >= 1024) return (rate / 1024).ToString("0.0", Invariant) + " MB/s";
+
+        return rate.ToString(rate < 10 ? "0.0" : "0", Invariant) + " KB/s";
     }
 
     private static void WriteHitches(StringBuilder text, Recorder recorder)
     {
         var hitches = recorder.Hitches;
 
-        Heading(text, $"Latest hitches (of {recorder.HitchCount})");
+        Heading(text, $"Worst hitches ({Math.Min(HitchLines, hitches.Count)} slowest of the {hitches.Count} kept)");
 
         if (hitches.Count == 0)
         {
@@ -255,16 +323,15 @@ public static class Report
             return;
         }
 
-        Line(text, "gc mods: collections by the mods' .NET runtime in that frame; gc game: collections by the game's own runtime.");
+        Line(text, "The parts add up to the frame. gc mods: collections by the mods' .NET runtime in that frame; gc game: collections by the game's own runtime.");
 
-        for (var i = hitches.Count - 1; i >= 0 && i >= hitches.Count - HitchLines; i--)
+        foreach (var hitch in Analysis.WorstHitches(recorder, HitchLines))
         {
-            var hitch = hitches[i];
             var s = hitch.Sample;
             var gc = s.ManagedGcs + s.GameGcs > 0 ? $", gc mods {s.ManagedGcs} game {s.GameGcs}" : "";
             var scene = hitch.Scene.Length > 0 ? $" in {hitch.Scene}" : "";
 
-            Line(text, $"#{hitch.Number} at {hitch.AtSeconds:0.0} s{scene}: {s.Ms:0.0} ms (mods {s.ModsMs:0.0}, hooks {s.HookMs:0.0}, game in hooks {s.GameMs:0.0}, rest {s.RestMs:0.0}{gc}) -> {Analysis.Cause(recorder, hitch)}");
+            Line(text, $"#{hitch.Number} at {hitch.AtSeconds:0.0} s{scene}: {s.Ms:0.0} ms (mods {s.ModsMs:0.0}, hooks {s.HookMs:0.0}, game in hooks {s.GameMs:0.0}, analyzer {s.AnalyzerMs:0.0}, rest {s.RestMs:0.0}{gc}) -> {Analysis.Cause(recorder, hitch)}");
 
             foreach (var entry in hitch.TopProbes.Take(4))
             {
