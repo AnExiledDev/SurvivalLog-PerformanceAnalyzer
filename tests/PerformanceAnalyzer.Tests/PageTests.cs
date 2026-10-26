@@ -100,6 +100,29 @@ public class PageTests
     }
 
     [Fact]
+    public void Memory_shows_a_dash_when_the_game_build_gives_no_reading_and_switches_to_gb_past_1024_mb()
+    {
+        var js = Format();
+
+        Assert.Equal("-", js.Evaluate("F.mb(0)").AsString());
+        Assert.Equal("-", js.Evaluate("F.mb(undefined)").AsString());
+        Assert.Equal("42.5 MB", js.Evaluate("F.mb(42.5)").AsString());
+        Assert.Equal("512 MB", js.Evaluate("F.mb(512.4)").AsString());
+        Assert.Equal("2.00 GB", js.Evaluate("F.mb(2048)").AsString());
+    }
+
+    [Fact]
+    public void A_seconds_graph_tops_out_at_one_two_or_five_times_a_power_of_ten_over_every_series()
+    {
+        var js = Format();
+
+        Assert.Equal(50, js.Evaluate("F.niceMax([[10, 20]], 50)").AsNumber());
+        Assert.Equal(100, js.Evaluate("F.niceMax([[10, 20], [75]], 60)").AsNumber());
+        Assert.Equal(2000, js.Evaluate("F.niceMax([[1100], null], 100)").AsNumber());
+        Assert.Equal(5000, js.Evaluate("F.niceMax([[2001]], 100)").AsNumber());
+    }
+
+    [Fact]
     public void Text_from_mods_is_escaped_before_it_reaches_the_panel()
     {
         Assert.Equal("&lt;img src=x onerror=&quot;a&quot;&gt;", Format().Evaluate("F.esc('<img src=x onerror=\"a\">')").AsString());

@@ -115,6 +115,8 @@ internal sealed class AnalyzerSession
 
         _instrumenter.Work(time);
 
+        if (_recorder.IsRecording) _frames.SampleMemory(time);
+
         if ((_isOpen || Overlay) && time >= _nextPushAt)
         {
             _nextPushAt = time + PushSeconds;
@@ -277,6 +279,7 @@ internal sealed class AnalyzerSession
             File.WriteAllText(report, text);
             File.WriteAllText(Path.Combine(_reportDir, "latest-report.txt"), text);
             File.WriteAllText(Path.Combine(_reportDir, $"frames-{stamp}.csv"), Report.FramesCsv(_recorder));
+            File.WriteAllText(Path.Combine(_reportDir, $"seconds-{stamp}.csv"), Report.SecondsCsv(_recorder));
             _log("report saved to " + report);
 
             if (tellPanel) _page.Toast("Saved to BepInEx/performance-analyzer/report-" + stamp + ".txt");

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 
@@ -20,6 +21,7 @@ public static class Snapshot
     public const int GraphFrames = 300;
     public const int MethodLimit = 300;
     public const int HitchLimit = 60;
+    public const int GraphSeconds = 300;
 
     public static string Json(Recorder recorder, SnapshotInput input) => Culture.Invariant(() => Write(recorder, input));
 
@@ -48,11 +50,20 @@ public static class Snapshot
             WriteSpread(json, "frame", spread);
             WriteSplit(json, split);
             WriteLatest(json, recorder, seconds);
+            WriteGame(json, recorder.Game);
+            WriteMemory(json, recorder.Game);
 
             if (input.Tab == PanelTab.Overview)
             {
                 WriteGraph(json, recorder.Ring);
                 WriteStrings(json, "verdict", Analysis.Verdict(recorder, seconds));
+            }
+
+            if (input.Tab == PanelTab.Game)
+            {
+                WriteTimeline(json, recorder.Game);
+                WriteScenes(json, recorder.Game, recorder.HitchMs);
+                WriteSpeeds(json, recorder.Game);
             }
 
             if (input.Tab is PanelTab.Overview or PanelTab.Mods) WriteMods(json, Analysis.ModRows(recorder, seconds), input.Tab == PanelTab.Overview ? 6 : int.MaxValue);
@@ -79,6 +90,125 @@ public static class Snapshot
         json.WriteString("name", top?.Mod.Name ?? "");
         Number(json, "avg", top?.AvgMs ?? 0, 3);
         json.WriteEndObject();
+    }
+
+    /// <summary>Logic updates, physics, game speed and clock: overall and for the last whole second.</summary>
+    private static void WriteGame(Utf8JsonWriter json, GameStats game)
+    {
+        var world = game.World;
+        var last = game.LastSecond;
+
+        json.WriteStartObject("game");
+        json.WriteBoolean("inGame", world.InGame);
+        json.WriteBoolean("seenGame", game.HasWorld);
+        json.WriteBoolean("paused", world.Paused);
+        Number(json, "fpsNow", last?.Fps ?? 0, 1);
+        Number(json, "logic", game.LogicPerSecond, 1);
+        Number(json, "logicNow", last?.LogicPerSecond ?? 0, 1);
+        Number(json, "fixed", game.FixedPerSecond, 1);
+        Number(json, "fixedNow", last?.FixedPerSecond ?? 0, 1);
+        Number(json, "physicsRate", world.FixedDeltaSeconds > 0 ? 1 / world.FixedDeltaSeconds : 0, 1);
+        Number(json, "timeScale", world.TimeScale, 3);
+        Number(json, "speed", world.GameSpeed, 2);
+        Number(json, "clockRate", game.ClockRate, 1);
+        Number(json, "clockNow", last?.ClockRate ?? 0, 1);
+        Number(json, "cappedPct", game.CappedPercent);
+        json.WriteNumber("cappedFrames", game.CappedFrames);
+        Number(json, "cappedMs", game.CappedMs, 0);
+        Number(json, "maxDeltaMs", world.MaxDeltaSeconds * 1000, 0);
+        Number(json, "inGameSeconds", game.InGameMs / 1000, 0);
+        Number(json, "pausedSeconds", game.PausedMs / 1000, 0);
+        json.WriteEndObject();
+    }
+
+    /// <summary>Each memory reading in MB: the newest, the peak and the growth per minute; 0 where it is not available.</summary>
+    private static void WriteMemory(Utf8JsonWriter json, GameStats game)
+    {
+        json.WriteStartObject("memory");
+
+        foreach (var (key, _, pick) in MemoryFields.All)
+        {
+            json.WriteStartObject(key);
+            Number(json, "now", pick(game.LastMemory) / Analysis.MB, 1);
+            Number(json, "peak", pick(game.PeakMemory) / Analysis.MB, 1);
+            Number(json, "perMin", game.GrowthPerMinute(pick) / Analysis.MB, 2);
+            json.WriteEndObject();
+        }
+
+        json.WriteEndObject();
+    }
+
+    /// <summary>The newest seconds as parallel arrays, for the Game tab's graphs.</summary>
+    private static void WriteTimeline(Utf8JsonWriter json, GameStats game)
+    {
+        var timeline = game.Timeline;
+        var from = Math.Max(0, timeline.Count - GraphSeconds);
+
+        json.WriteStartObject("timeline");
+        SecondSeries(json, "fps", timeline, from, s => s.Fps);
+        SecondSeries(json, "logic", timeline, from, s => s.LogicPerSecond);
+        SecondSeries(json, "maxMs", timeline, from, s => s.MaxMs);
+        SecondSeries(json, "speed", timeline, from, s => s.GameSpeed);
+        SecondSeries(json, "gameHeap", timeline, from, s => s.Memory.GameHeap / Analysis.MB);
+        SecondSeries(json, "unity", timeline, from, s => s.Memory.UnityAllocated / Analysis.MB);
+        SecondSeries(json, "process", timeline, from, s => s.Memory.WorkingSet / Analysis.MB);
+        json.WriteEndObject();
+    }
+
+    private static void SecondSeries(Utf8JsonWriter json, string name, IReadOnlyList<SecondSample> timeline, int from, Func<SecondSample, double> pick)
+    {
+        json.WriteStartArray(name);
+
+        for (var i = from; i < timeline.Count; i++)
+        {
+            var value = pick(timeline[i]);
+
+            json.WriteNumberValue(double.IsFinite(value) ? Math.Round(value, 1) : 0);
+        }
+
+        json.WriteEndArray();
+    }
+
+    private static void WriteScenes(Utf8JsonWriter json, GameStats game, double hitchMs)
+    {
+        json.WriteStartArray("scenes");
+
+        foreach (var scene in game.Scenes)
+        {
+            json.WriteStartObject();
+            json.WriteString("name", scene.Name);
+            json.WriteNumber("frames", scene.Frames);
+            Number(json, "seconds", scene.Ms / 1000, 0);
+            Number(json, "fps", scene.Fps, 1);
+            Number(json, "mean", scene.MeanMs);
+            Number(json, "p50", scene.Percentile(0.50));
+            Number(json, "p95", scene.Percentile(0.95));
+            Number(json, "p99", scene.Percentile(0.99));
+            Number(json, "max", scene.MaxMs);
+            json.WriteNumber("hitches", scene.Hitches);
+            Number(json, "over16", scene.Frames > 0 ? scene.Over16 * 100.0 / scene.Frames : 0, 1);
+            Number(json, "over33", scene.Frames > 0 ? scene.Over33 * 100.0 / scene.Frames : 0, 1);
+            Number(json, "logic", scene.LogicPerSecond, 1);
+            json.WriteEndObject();
+        }
+
+        json.WriteEndArray();
+    }
+
+    /// <summary>Share of in-game time at each game speed, fastest last.</summary>
+    private static void WriteSpeeds(Utf8JsonWriter json, GameStats game)
+    {
+        json.WriteStartArray("speeds");
+
+        foreach (var (speed, ms) in game.SpeedMs.OrderBy(pair => pair.Key))
+        {
+            json.WriteStartObject();
+            Number(json, "speed", speed);
+            Number(json, "pct", game.InGameMs > 0 ? ms * 100 / game.InGameMs : 0, 1);
+            json.WriteEndObject();
+        }
+
+        json.WriteEndArray();
     }
 
     private static void WriteStatus(Utf8JsonWriter json, InstrumentStatus status, int overflow)

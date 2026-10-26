@@ -154,10 +154,38 @@ public static class Analysis
 
         if (spiky != null) lines.Add($"{spiky.Mod.Name} had a single frame where it took {spiky.WorstMs:0} ms on its own, which is felt as a stutter.");
 
+        lines.AddRange(GameVerdict(recorder));
         lines.AddRange(HitchVerdict(recorder));
 
         if (split.HookMs >= 0.5) lines.Add($"Hooking game methods costs {split.HookMs:0.00} ms per frame by itself. The Methods tab sorted by self time shows which hooks run most often.");
         if (split.AnalyzerMs >= 1) lines.Add($"The analyzer itself adds about {split.AnalyzerMs:0.0} ms per frame. A deep profile adds the most; turn it off when done.");
+
+        return lines;
+    }
+
+    public const double MB = 1024 * 1024;
+
+    /// <summary>What the game side shows: game time lost to slow frames, memory that keeps growing, the slowest place.</summary>
+    public static List<string> GameVerdict(Recorder recorder)
+    {
+        var lines = new List<string>();
+        var game = recorder.Game;
+
+        if (game.CappedPercent >= 1) lines.Add($"Some frames were so slow that the game itself slowed down: {game.CappedPercent:0.0}% of game time was lost over {game.CappedFrames} frames.");
+
+        var minutes = (game.LastMemoryAt - game.FirstMemoryAt) / 60;
+        var heap = game.GrowthPerMinute(m => m.GameHeap) / MB;
+
+        if (minutes >= 5 && heap >= 5) lines.Add($"The game's script memory grew by {heap:0} MB a minute over {minutes:0} minutes. If it keeps climbing in a long session, something is holding on to memory.");
+
+        var scenes = game.Scenes.Where(s => s.Frames >= 300 && s.Name.Length > 0).ToList();
+
+        if (scenes.Count >= 2)
+        {
+            var slowest = scenes.OrderByDescending(s => s.MeanMs).First();
+
+            lines.Add($"The slowest place was {slowest.Name}, at about {slowest.Fps:0} frames per second.");
+        }
 
         return lines;
     }

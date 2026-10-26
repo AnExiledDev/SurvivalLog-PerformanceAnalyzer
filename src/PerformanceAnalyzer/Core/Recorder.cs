@@ -85,6 +85,9 @@ public sealed class Recorder
 
     public FrameRing Ring => _ring;
 
+    /// <summary>The game side: logic updates, game speed and clock, memory over time, frame times per scene.</summary>
+    public GameStats Game { get; } = new();
+
     public long FrameCount { get; private set; }
 
     public long HitchCount { get; private set; }
@@ -152,6 +155,7 @@ public sealed class Recorder
 
         _hitches.Clear();
         _ring.Clear();
+        Game.Clear();
         _offThreadCalls.Clear();
         DropStack();
         _overflow = 0;
@@ -232,11 +236,12 @@ public sealed class Recorder
 
         var frameMs = (now - _lastFrameEnd) / _ticksPerMs;
         var split = FoldFrame(frameMs);
-        var sample = new FrameSample((float)frameMs, (float)split.ModsMs, (float)split.HookMs, (float)split.GameMs, (float)split.AnalyzerMs, context.ManagedGcs, context.GameGcs, context.Engine);
+        var sample = new FrameSample((float)frameMs, (float)split.ModsMs, (float)split.HookMs, (float)split.GameMs, (float)split.AnalyzerMs, context.ManagedGcs, context.GameGcs, context.Engine, context.World);
 
         _lastFrameEnd = now;
         FrameCount++;
         _ring.Push(sample, _modFrameMs);
+        Game.Add((now - _recordStart) / _ticksPerMs / 1000, frameMs, frameMs >= HitchMs, context.Scene, context.World, context.Memory);
 
         if (frameMs >= HitchMs) RecordHitch(now, sample, context);
 
@@ -451,12 +456,14 @@ public sealed class ModTotals
 /// <param name="GameGcs">Collections by the game's own runtime during the frame.</param>
 /// <param name="Engine">The engine's frame timings, when the game has them turned on.</param>
 /// <param name="Scene">Where the player was, for a hitch ("home", "map", "menu").</param>
-public readonly record struct FrameContext(short ManagedGcs, short GameGcs, EngineTimes Engine, string Scene);
+/// <param name="World">The engine clock and the game world this frame.</param>
+/// <param name="Memory">The latest memory reading, empty when none was taken.</param>
+public readonly record struct FrameContext(short ManagedGcs, short GameGcs, EngineTimes Engine, string Scene, WorldReading World = default, MemoryReading Memory = default);
 
 /// <summary>Milliseconds from the engine's frame timing, all zero when the game does not collect them.</summary>
 public readonly record struct EngineTimes(float MainThreadMs, float RenderThreadMs, float GpuMs);
 
-public readonly record struct FrameSample(float Ms, float ModsMs, float HookMs, float GameMs, float AnalyzerMs, short ManagedGcs, short GameGcs, EngineTimes Engine)
+public readonly record struct FrameSample(float Ms, float ModsMs, float HookMs, float GameMs, float AnalyzerMs, short ManagedGcs, short GameGcs, EngineTimes Engine, WorldReading World = default)
 {
     /// <summary>Time no probe saw: the game's own work outside hooked methods, rendering and waiting.</summary>
     public float RestMs => Math.Max(0, Ms - ModsMs - HookMs - GameMs - AnalyzerMs);

@@ -6,7 +6,7 @@
 
   const PREFIX = 'slmod|perfanalyzer|';
   const F = window.__slperfanalyzerFormat;
-  const TABS = [['overview', 'Overview'], ['mods', 'Mods'], ['methods', 'Methods'], ['hitches', 'Hitches'], ['web', 'Web UI'], ['report', 'Report']];
+  const TABS = [['overview', 'Overview'], ['game', 'Game'], ['mods', 'Mods'], ['methods', 'Methods'], ['hitches', 'Hitches'], ['web', 'Web UI'], ['report', 'Report']];
   const send = (m) => { try { if (window.vuplex) window.vuplex.postMessage(PREFIX + m); } catch (e) { /* the bridge is gone; the plugin sends the panel again */ } };
   const esc = F.esc;
 
@@ -104,6 +104,7 @@
     if (!snap) { $('#main').innerHTML = '<p class="dim">Waiting for the first numbers...</p>'; return; }
 
     if (state.tab === 'overview') drawOverview(snap);
+    else if (state.tab === 'game') drawGame(snap);
     else if (state.tab === 'mods') drawMods(snap);
     else if (state.tab === 'methods') drawMethods(false);
     else if (state.tab === 'hitches') drawHitches(snap);
@@ -126,8 +127,17 @@
       : '';
   }
 
-  function tile(label, value, cls, hint) {
-    return `<div class="tile ${cls || ''}" title="${esc(hint || '')}"><span>${label}</span><b>${value}</b></div>`;
+  function tile(label, value, cls, hint, sub) {
+    return `<div class="tile ${cls || ''}" title="${esc(hint || '')}"><span>${label}</span><b>${value}</b>${sub ? `<em>${sub}</em>` : ''}</div>`;
+  }
+
+  // Frames per second as a class: under 60 is "warn", under 30 is "bad".
+  function fpsClass(v) {
+    return v <= 0 ? '' : v < 30 ? 'bad' : v < 59 ? 'warn' : 'good';
+  }
+
+  function speedText(v) {
+    return v > 0 ? (Math.round(v * 100) / 100) + 'x' : '-';
   }
 
   function drawOverview(snap) {
@@ -149,10 +159,78 @@
       tile('99th', F.ms(f.p99) + ' ms', F.frameClass(f.p99), '1 frame in 100 is slower than this') +
       tile('Worst', F.ms(f.max) + ' ms', F.frameClass(f.max)) +
       tile('FPS', f.mean > 0 ? (1000 / f.mean).toFixed(0) : '-', '') +
+      overviewGameTiles(snap) +
       '</section>' +
       `<section><h3>Where an average frame goes <span class="dim">(${F.ms(s.frame)} ms)</span></h3><div class="split">${bar}</div><div class="legend">${legend}</div></section>` +
       `<section><h3>Frame time, last ${(snap.graph && snap.graph.ms ? snap.graph.ms.length : 0)} frames</h3>${graph(snap.graph)}</section>` +
       `<section><h3>Mods costing the most</h3><table><tr><th>Mod</th><th class="n">ms / frame</th><th class="n">99th</th><th class="n">worst frame</th><th class="n">share</th></tr>${mods || '<tr><td colspan="5" class="dim">No mod has run any timed code yet.</td></tr>'}</table></section>`;
+  }
+
+  // The game side on the Overview: logic updates and the process's memory. The Game tab has the rest.
+  function overviewGameTiles(snap) {
+    const g = snap.game || {};
+    const mem = snap.memory || {};
+    const process = mem.process || {};
+
+    return (g.seenGame ? tile('Logic / s', g.logic.toFixed(0), '', 'Game world updates per second while in a game. The game updates its world once per frame, so this follows the frame rate.') : '') +
+      (g.inGame ? tile('Game speed', speedText(g.speed), '', g.paused ? 'Paused' : 'The game speed setting') : '') +
+      tile('Memory', F.mb(process.now), '', 'The game process in RAM. The Game tab splits it up.');
+  }
+
+  function drawGame(snap) {
+    const g = snap.game || {};
+    const mem = snap.memory || {};
+    const t = snap.timeline || {};
+    const lost = g.cappedPct || 0;
+    const scenes = (snap.scenes || []).map((s) => `<tr><td>${esc(s.name || '(none)')}</td><td class="n">${F.seconds(s.seconds)}</td><td class="n ${fpsClass(s.fps)}">${s.fps.toFixed(1)}</td>` +
+      `<td class="n">${F.ms(s.mean)}</td><td class="n">${F.ms(s.p50)}</td><td class="n">${F.ms(s.p95)}</td><td class="n ${F.frameClass(s.p99)}">${F.ms(s.p99)}</td><td class="n">${F.ms(s.max)}</td>` +
+      `<td class="n">${F.percent(s.over16)}</td><td class="n">${F.percent(s.over33)}</td><td class="n">${F.count(s.hitches)}</td><td class="n">${s.logic.toFixed(1)}</td></tr>`).join('');
+    const speeds = (snap.speeds || []).map((s) => `<span>${speedText(s.speed)} <b>${F.percent(s.pct)}</b></span>`).join('');
+    const memTiles = [['game', 'Game script heap', 'The game\'s own script memory. Growing every minute in a long session can mean a leak.'],
+      ['mods', 'Mods\' heap', 'Memory of the mods\' .NET runtime, shared by every mod.'],
+      ['unity', 'Engine allocated', 'Memory the engine has handed out.'],
+      ['reserved', 'Engine reserved', 'Memory the engine has taken from the system.'],
+      ['textures', 'Textures', 'Memory the loaded textures use.'],
+      ['process', 'Process in RAM', 'The whole game process in RAM.']]
+      .map(([key, label, hint]) => {
+        const m = mem[key] || {};
+        const per = m.perMin ? `${m.perMin > 0 ? '+' : ''}${m.perMin.toFixed(1)} MB/min` : '';
+
+        return tile(label, F.mb(m.now), '', hint, m.now > 0 ? `peak ${F.mb(m.peak)}${per ? ', ' + per : ''}` : 'not available');
+      }).join('');
+
+    $('#main').innerHTML =
+      '<p class="dim">The game has no fixed tick: it updates its world once per frame, so logic updates per second follow the frame rate. When one frame runs longer than the engine allows, the game itself slows down; that is the game time lost.</p>' +
+      '<section class="tiles">' +
+      tile('FPS now', g.fpsNow > 0 ? g.fpsNow.toFixed(0) : '-', fpsClass(g.fpsNow), 'Frames in the last whole second') +
+      tile('Logic / s', g.seenGame ? g.logicNow.toFixed(0) : '-', '', 'Game world updates in the last whole second', g.seenGame ? `average ${g.logic.toFixed(1)}` : 'no game loaded') +
+      tile('Physics / s', g.fixedNow.toFixed(0), '', 'Physics steps the engine ran in the last whole second', `set to ${g.physicsRate.toFixed(0)}, average ${g.fixed.toFixed(1)}`) +
+      tile('Game speed', g.inGame ? (g.paused ? 'paused' : speedText(g.speed)) : '-', '', 'The game speed setting', `engine time scale ${g.timeScale}`) +
+      tile('Game clock', g.seenGame ? g.clockNow.toFixed(0) : '-', '', 'In-game seconds per real second in the last whole second', g.seenGame ? `average ${g.clockRate.toFixed(1)} while running` : '') +
+      tile('Game time lost', F.percent(lost), lost >= 5 ? 'bad' : lost >= 1 ? 'warn' : '', `Game time dropped because a frame took longer than ${g.maxDeltaMs} ms`, `${F.count(g.cappedFrames)} frames, ${F.ms(g.cappedMs / 1000)} s`) +
+      '</section>' +
+      (speeds ? `<section><h3>Time at each game speed</h3><div class="chips">${speeds}</div></section>` : '') +
+      `<section><h3>Frames and logic updates per second, last ${(t.fps || []).length} seconds</h3>${secondsGraph([['ms', 'Frames per second', t.fps], ['game', 'Logic updates per second', t.logic]], 60, '/s')}</section>` +
+      `<section><h3>Memory</h3><div class="tiles">${memTiles}</div></section>` +
+      `<section><h3>Memory, last ${(t.process || []).length} seconds</h3>${secondsGraph([['ms', 'Process in RAM', t.process], ['game', 'Engine allocated', t.unity], ['mods', 'Game script heap', t.gameHeap]], 100, ' MB')}</section>` +
+      '<section><h3>Scenes</h3><table><tr><th>Scene</th><th class="n">time</th><th class="n">fps</th><th class="n">mean</th><th class="n">median</th><th class="n">95th</th><th class="n">99th</th><th class="n">worst</th><th class="n">over 16.7</th><th class="n">over 33.3</th><th class="n">hitches</th><th class="n">logic / s</th></tr>' +
+      (scenes || '<tr><td colspan="12" class="dim">Nothing recorded yet.</td></tr>') + '</table><p class="dim">Frame times in ms since the last reset. "Over 16.7" is the share of frames under 60 frames per second, "over 33.3" under 30.</p></section>';
+  }
+
+  // One line per series over the last seconds; a series with no readings is left out.
+  function secondsGraph(series, floor, unit) {
+    const shown = series.filter(([, , list]) => Array.isArray(list) && list.some((v) => v > 0));
+
+    if (shown.length === 0 || shown[0][2].length < 2) return '<p class="dim">Record for a few seconds to draw the graph.</p>';
+
+    const W = 1000;
+    const H = 160;
+    const max = F.niceMax(shown.map((s) => s[2]), floor);
+
+    return `<svg class="graph" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">` +
+      shown.map(([cls, , list]) => `<polyline class="${cls}" points="${F.points(list, W, H, max)}"/>`).join('') +
+      `<text x="${W - 4}" y="12" class="r">${max}${unit}</text></svg>` +
+      '<div class="legend">' + shown.map(([cls, label]) => `<span><i class="${cls === 'ms' ? 'msl' : cls}"></i>${label}</span>`).join('') + '</div>';
   }
 
   function graph(g) {
@@ -280,11 +358,15 @@
 
     const f = snap.frame || {};
     const top = snap.topMod || {};
+    const g = snap.game || {};
+    const process = (snap.memory || {}).process || {};
 
     el.hidden = false;
     el.innerHTML = `<b class="${F.frameClass(snap.lastMs)}">${F.ms(snap.lastMs)} ms</b> <span>avg ${F.ms(f.mean)}, 99th ${F.ms(f.p99)}</span>` +
       `<span>${snap.recording ? '<i class="live"></i>' : 'stopped, '}hitches ${F.count(snap.hitchCount)}</span>` +
-      (top.name ? `<span>top mod ${esc(top.name)} ${F.ms(top.avg)} ms</span>` : '');
+      (top.name ? `<span>top mod ${esc(top.name)} ${F.ms(top.avg)} ms</span>` : '') +
+      (g.inGame ? `<span>logic ${(g.logicNow || 0).toFixed(0)}/s, ${g.paused ? 'paused' : 'speed ' + speedText(g.speed)}${g.cappedPct >= 1 ? `, <b class="warn">${F.percent(g.cappedPct)} lost</b>` : ''}</span>` : '') +
+      (process.now > 0 ? `<span>memory ${F.mb(process.now)}</span>` : '');
   }
 
   function toast(text) {

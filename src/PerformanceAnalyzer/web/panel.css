@@ -71,6 +71,7 @@ em { color: var(--steel-3); font-style: normal; }
 .tile { min-width: 120px; padding: 8px 12px; background: var(--glass-2); border: 1px solid var(--line-2); }
 .tile span { display: block; font-size: 11px; color: var(--steel-3); text-transform: uppercase; letter-spacing: 1px; }
 .tile b { font: 600 20px var(--mono); }
+.tile em { display: block; margin-top: 2px; font-size: 11px; }
 .tile.good b { color: var(--mint); }
 .tile.warn b { color: var(--amber); }
 .tile.bad b { color: var(--rust); }

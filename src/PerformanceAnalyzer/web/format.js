@@ -39,6 +39,29 @@
     return (n < 10 ? n.toFixed(1) : n.toFixed(0)) + ' KB';
   }
 
+  // Megabytes, '-' when the game build gives no reading.
+  function mb(v) {
+    const n = finite(v);
+
+    if (n <= 0) return '-';
+    if (n >= 1024) return (n / 1024).toFixed(2) + ' GB';
+
+    return (n < 100 ? n.toFixed(1) : n.toFixed(0)) + ' MB';
+  }
+
+  // The top of a graph's scale: the largest value rounded up to 1, 2 or 5 times a power of ten, never below floor.
+  function niceMax(series, floor) {
+    let max = finite(floor) > 0 ? floor : 1;
+
+    for (const list of series) for (const v of Array.isArray(list) ? list : []) max = Math.max(max, finite(v));
+
+    const power = Math.pow(10, Math.floor(Math.log10(max)));
+
+    for (const m of [1, 2, 5, 10]) if (max <= m * power + 1e-9) return m * power;
+
+    return 10 * power;
+  }
+
   function seconds(v) {
     const n = Math.floor(finite(v));
     const m = Math.floor(n / 60);
@@ -122,5 +145,5 @@
     });
   }
 
-  window.__slperfanalyzerFormat = { ms, count, percent, kb, seconds, esc, frameClass, costClass, points, graphMax, sortRows, filterRows };
+  window.__slperfanalyzerFormat = { ms, count, percent, kb, mb, niceMax, seconds, esc, frameClass, costClass, points, graphMax, sortRows, filterRows };
 })();

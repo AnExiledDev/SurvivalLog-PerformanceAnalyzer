@@ -17,7 +17,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.1.0";
+    private const string Version = "0.2.0";
 
     public override void Load()
     {

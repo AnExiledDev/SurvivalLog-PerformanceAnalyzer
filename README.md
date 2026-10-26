@@ -8,7 +8,7 @@ This is a development tool for testing mods. It is not released and has no Nexus
 
 1. Press `Insert` in game to open the panel.
 2. Press **Start** and play the part of the game that feels slow for a minute.
-3. Read the **Overview** tab: the verdict at the top says whether mods are a real part of the frame time, and which one costs the most.
+3. Read the **Overview** tab: the verdict at the top says whether mods are a real part of the frame time, and which one costs the most. The **Game** tab shows the game's own frame rate, world updates, speed and memory.
 4. Press **Copy report** to put a text report on the clipboard, or **Save** to write it to a file.
 
 `Esc` or the close button closes the panel. Recording keeps going while it is closed.
@@ -22,9 +22,12 @@ This is a development tool for testing mods. It is not released and has no Nexus
 - **Methods**: every timed patch and Update method, sortable and with a filter.
 - **Deep profile**: the Deep button on a mod's row also times every method in that mod, to find the slow one inside it.
 - **Menus**: the Web tab times each mod's scripts inside the game's web UI, and counts the scripts each mod sends, the page elements it owns, and the timers, intervals, listeners and observers it leaves running. A mod with a lot of these slows the menus even when its own code looks fast.
+- **The game itself**: frames per second, world updates per second, physics steps per second, the game speed and how many in-game seconds pass per real second. The game has no fixed tick: it updates its world once per frame, so world updates follow the frame rate. When a frame runs longer than the engine allows, the game itself slows down; the analyzer shows how much game time was lost that way.
+- **Memory**: the game's script memory, the mods' memory, what the engine has allocated and reserved, textures and the whole process, read once a second, with the peak and the growth per minute. A reading the game build doesn't give shows as not available.
+- **Scenes**: frame rate and frame time spread for each scene since the last reset.
 - **Its own cost**: the analyzer measures what one timing costs and reports its own share, so you can see how much it adds.
 
-The frame file is a CSV with one line per frame and a column per mod, for a spreadsheet.
+The frame file is a CSV with one line per frame and a column per mod, for a spreadsheet. The seconds file has one line per second of the last hour: frame rate, world updates, game speed, the scene and memory.
 
 ## Buttons
 
@@ -34,8 +37,8 @@ The frame file is a CSV with one line per frame and a column per mod, for a spre
 | Reset | Forget everything recorded so far. |
 | Unhook | Stop recording and remove every timing hook, to compare the game with and without the analyzer. |
 | Copy report | Put the text report on the clipboard. |
-| Save | Write `report-<date>.txt`, `latest-report.txt` and `frames-<date>.csv` to `BepInEx\performance-analyzer`. |
-| Overlay | Show frame time and the slowest mod in the top-right corner, even with the panel closed. |
+| Save | Write `report-<date>.txt`, `latest-report.txt`, `frames-<date>.csv` and `seconds-<date>.csv` to `BepInEx\performance-analyzer`. |
+| Overlay | Show frame time, the slowest mod, world updates, game speed and memory in the top-right corner, even with the panel closed. |
 | Deep (Mods tab) | Time every method of that mod. One mod at a time. |
 
 ## What it can't see

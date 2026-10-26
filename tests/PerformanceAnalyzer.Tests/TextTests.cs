@@ -145,6 +145,7 @@ public class TextTests
     [InlineData(PanelTab.Methods, "methods")]
     [InlineData(PanelTab.Hitches, "hitches")]
     [InlineData(PanelTab.Web, "scripts")]
+    [InlineData(PanelTab.Game, "scenes")]
     public void Each_tab_gets_its_own_list_and_only_that_tab(PanelTab tab, string list)
     {
         using var doc = JsonDocument.Parse(Snapshot.Json(Recorded(), Input(tab)));

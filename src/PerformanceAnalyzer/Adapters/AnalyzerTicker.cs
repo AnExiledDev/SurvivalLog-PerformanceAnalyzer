@@ -20,7 +20,22 @@ public sealed class AnalyzerTicker : MonoBehaviour
     {
     }
 
+    private static int _fixedSteps;
+
+    /// <summary>Physics steps since the last call.</summary>
+    internal static int TakeFixedSteps()
+    {
+        var steps = _fixedSteps;
+
+        _fixedSteps = 0;
+
+        return steps;
+    }
+
     private void Update() => Guard(() => Session?.Update());
+
+    // The engine runs this once per physics step, so counting it gives the physics rate.
+    private void FixedUpdate() => _fixedSteps++;
 
     private void OnApplicationQuit() => Guard(() => Session?.Quit());
 

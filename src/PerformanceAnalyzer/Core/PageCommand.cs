@@ -117,6 +117,7 @@ public abstract record PageCommand
 public enum PanelTab
 {
     Overview,
+    Game,
     Mods,
     Methods,
     Hitches,

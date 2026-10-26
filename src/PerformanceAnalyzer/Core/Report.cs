@@ -28,6 +28,9 @@ public static class Report
     /// <summary>One line per frame in the window, for a spreadsheet.</summary>
     public static string FramesCsv(Recorder recorder) => Culture.Invariant(() => WriteCsv(recorder));
 
+    /// <summary>One line per second of the recording (up to the last hour): frame rate, logic, game speed and memory.</summary>
+    public static string SecondsCsv(Recorder recorder) => Culture.Invariant(() => WriteSecondsCsv(recorder.Game));
+
     private static string Write(Recorder recorder, ReportInput input)
     {
         var text = new StringBuilder();
@@ -51,6 +54,10 @@ public static class Report
         Line(text, $"hitches (>= {recorder.HitchMs:0} ms): {recorder.HitchCount}");
         Line(text);
 
+        WriteGame(text, recorder.Game);
+        WriteMemory(text, recorder.Game);
+        WriteScenes(text, recorder.Game);
+
         WriteMods(text, Analysis.ModRows(recorder, seconds));
         WriteMethods(text, Analysis.MethodRows(recorder, MethodLines));
         WriteHitches(text, recorder);
@@ -66,7 +73,7 @@ public static class Report
     {
         var ring = recorder.Ring;
         var mods = Enumerable.Range(0, recorder.Mods.Count).Where(m => m != Recorder.GameMod && ring.Count > 0 && Enumerable.Range(0, ring.Count).Any(i => ring.ModMs(m, i) > 0)).ToList();
-        var csv = new StringBuilder("frame,ms,mods_ms,hooks_ms,game_in_hooks_ms,analyzer_ms,rest_ms,gc_mods,gc_game,engine_main_ms,engine_render_ms,engine_gpu_ms");
+        var csv = new StringBuilder("frame,ms,mods_ms,hooks_ms,game_in_hooks_ms,analyzer_ms,rest_ms,gc_mods,gc_game,engine_main_ms,engine_render_ms,engine_gpu_ms,time_scale,game_speed,game_dt_ms,fixed_steps,logic_ran,paused,capped_ms");
 
         foreach (var mod in mods) csv.Append(',').Append(CsvName(recorder.Mods[mod].Key)).Append("_ms");
 
@@ -76,7 +83,7 @@ public static class Report
         {
             var f = ring[i];
 
-            csv.Append(string.Join(",", new[] { (recorder.FrameCount - ring.Count + i + 1).ToString(Invariant), F(f.Ms), F(f.ModsMs), F(f.HookMs), F(f.GameMs), F(f.AnalyzerMs), F(f.RestMs), f.ManagedGcs.ToString(Invariant), f.GameGcs.ToString(Invariant), F(f.Engine.MainThreadMs), F(f.Engine.RenderThreadMs), F(f.Engine.GpuMs) }));
+            csv.Append(string.Join(",", new[] { (recorder.FrameCount - ring.Count + i + 1).ToString(Invariant), F(f.Ms), F(f.ModsMs), F(f.HookMs), F(f.GameMs), F(f.AnalyzerMs), F(f.RestMs), f.ManagedGcs.ToString(Invariant), f.GameGcs.ToString(Invariant), F(f.Engine.MainThreadMs), F(f.Engine.RenderThreadMs), F(f.Engine.GpuMs), F(f.World.TimeScale), F(f.World.GameSpeed), F(f.World.DeltaSeconds * 1000), f.World.FixedSteps.ToString(Invariant), f.World.LogicRan ? "1" : "0", f.World.Paused ? "1" : "0", F(f.World.LogicRan && !f.World.Paused ? f.World.CappedMs : 0) }));
 
             foreach (var mod in mods) csv.Append(',').Append(F(ring.ModMs(mod, i)));
 
@@ -84,6 +91,108 @@ public static class Report
         }
 
         return csv.ToString();
+    }
+
+    private static string WriteSecondsCsv(GameStats game)
+    {
+        var csv = new StringBuilder("second,frames,fps,max_ms,hitches,logic_per_s,fixed_per_s,game_speed,time_scale,paused,clock_per_s,capped_ms,scene,game_heap_mb,mods_heap_mb,engine_allocated_mb,engine_reserved_mb,textures_mb,process_mb\n");
+
+        foreach (var s in game.Timeline)
+        {
+            var m = s.Memory;
+
+            csv.Append(string.Join(",", new[] { s.Second.ToString(Invariant), s.Frames.ToString(Invariant), D(s.Fps), F(s.MaxMs), s.Hitches.ToString(Invariant), D(s.LogicPerSecond), D(s.FixedPerSecond), F(s.GameSpeed), F(s.TimeScale), s.Paused ? "1" : "0", D(s.ClockRate), F(s.CappedMs), CsvName(s.Scene), Mb(m.GameHeap), Mb(m.ModsHeap), Mb(m.UnityAllocated), Mb(m.UnityReserved), Mb(m.Textures), Mb(m.WorkingSet) }));
+            csv.Append('\n');
+        }
+
+        return csv.ToString();
+    }
+
+    private static void WriteGame(StringBuilder text, GameStats game)
+    {
+        var world = game.World;
+
+        Heading(text, "Game clock and logic");
+
+        if (game.Frames == 0)
+        {
+            Line(text, "nothing recorded yet");
+            Line(text);
+
+            return;
+        }
+
+        Line(text, "The game has no fixed tick: its world updates once per frame, so logic updates per second follow the frame rate.");
+
+        if (game.HasWorld)
+        {
+            Line(text, $"in a game {game.InGameMs / 1000:0} s, paused {game.PausedMs / 1000:0} s; logic updates {game.LogicPerSecond:0.0}/s while in a game");
+            Line(text, $"in-game clock: {game.ClockRate:0.0} game seconds per real second while running");
+            Line(text, "time at each game speed: " + string.Join(", ", game.SpeedMs.OrderBy(p => p.Key).Select(p => $"{p.Key:0.##}x {(game.InGameMs > 0 ? p.Value * 100 / game.InGameMs : 0):0}%")));
+        }
+        else
+        {
+            Line(text, "no game was loaded while recording (menus only)");
+        }
+
+        Line(text, $"physics steps {game.FixedPerSecond:0.0}/s (set to {(world.FixedDeltaSeconds > 0 ? 1 / world.FixedDeltaSeconds : 0):0}/s); engine time scale {world.TimeScale:0.###}, game speed {world.GameSpeed:0.##} at the end");
+        Line(text, $"game time lost to slow frames: {game.CappedMs / 1000:0.0} s over {game.CappedFrames} frames ({game.CappedPercent:0.0}% of game time); one frame may move the game at most {world.MaxDeltaSeconds * 1000:0} ms");
+        Line(text);
+    }
+
+    private static void WriteMemory(StringBuilder text, GameStats game)
+    {
+        Heading(text, "Memory (MB)");
+
+        if (game.LastMemory.IsEmpty)
+        {
+            Line(text, "no memory reading yet");
+            Line(text);
+
+            return;
+        }
+
+        Line(text, $"{"",-20} {"now",9} {"peak",9} {"per min",9}");
+
+        foreach (var (_, label, pick) in MemoryFields.All)
+        {
+            if (pick(game.PeakMemory) == 0)
+            {
+                Line(text, $"{label,-20} {"n/a",9}");
+
+                continue;
+            }
+
+            Line(text, $"{label,-20} {pick(game.LastMemory) / Analysis.MB,9:0.0} {pick(game.PeakMemory) / Analysis.MB,9:0.0} {game.GrowthPerMinute(pick) / Analysis.MB,9:+0.00;-0.00;0.00}");
+        }
+
+        Line(text, $"over {(game.LastMemoryAt - game.FirstMemoryAt) / 60:0.0} minutes; per min is the change from the first reading to the last");
+        Line(text);
+    }
+
+    private static void WriteScenes(StringBuilder text, GameStats game)
+    {
+        Heading(text, "Scenes (frame time in ms)");
+
+        if (game.Scenes.Count == 0)
+        {
+            Line(text, "none yet");
+            Line(text);
+
+            return;
+        }
+
+        Line(text, $"{"scene",-20} {"seconds",8} {"fps",6} {"mean",7} {"p50",7} {"p95",7} {"p99",7} {"max",8} {">16.7",6} {">33.3",6} {"hitches",8} {"logic/s",8}");
+
+        foreach (var s in game.Scenes)
+        {
+            var over16 = s.Frames > 0 ? s.Over16 * 100.0 / s.Frames : 0;
+            var over33 = s.Frames > 0 ? s.Over33 * 100.0 / s.Frames : 0;
+
+            Line(text, $"{Fit(s.Name.Length > 0 ? s.Name : "(none)", 20),-20} {s.Ms / 1000,8:0} {s.Fps,6:0.0} {s.MeanMs,7:0.00} {s.Percentile(0.50),7:0.00} {s.Percentile(0.95),7:0.00} {s.Percentile(0.99),7:0.00} {s.MaxMs,8:0.0} {over16,5:0}% {over33,5:0}% {s.Hitches,8} {s.LogicPerSecond,8:0.0}");
+        }
+
+        Line(text);
     }
 
     private static void WriteMods(StringBuilder text, List<ModRow> rows)
@@ -251,6 +360,10 @@ public static class Report
     private static string Fit(string text, int width) => text.Length <= width ? text : text.Substring(0, width - 1) + "~";
 
     private static string F(float value) => value.ToString("0.###", Invariant);
+
+    private static string D(double value) => double.IsFinite(value) ? value.ToString("0.##", Invariant) : "0";
+
+    private static string Mb(long bytes) => bytes > 0 ? (bytes / Analysis.MB).ToString("0.0", Invariant) : "";
 
     private static string CsvName(string key) => new(key.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
 
