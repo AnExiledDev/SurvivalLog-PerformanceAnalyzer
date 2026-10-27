@@ -68,6 +68,6 @@ Each marker shows as its own row, kind `marker`, in the Methods tab, the report 
 ## Requirements
 
 - BepInEx 6 (IL2CPP).
-- Exiled's Toolkit is optional. With it, settings changed on the Mod Manager's Mods screen apply at once.
+- Exiled's Toolkit is optional. With it, settings changed on the Mod Manager's Mods screen apply at once. With 0.10.0 or newer, its UI size setting also sizes the panel, the corner overlay and the notices.
 
 Settings are in [CONFIG.md](CONFIG.md).

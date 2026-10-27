@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- The panel, the corner overlay and the notices can be drawn bigger or smaller with the UI size setting of Exiled's Toolkit 0.10.0 or newer. A change shows at once.
+
 ## 0.5.0
 
 - The Web tab now counts the timers, listeners and observers mods leave inside the game's own pages, not just the main page.

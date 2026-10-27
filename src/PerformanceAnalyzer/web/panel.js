@@ -416,6 +416,34 @@
     state.toastTimer = setTimeout(() => { el.hidden = true; }, 4000);
   }
 
+  // ---------- UI size ----------
+
+  // The panel, the overlay and the notices all sit in the host, so it is the one element sized. The panel is pinned
+  // inside the window's edges and the rest is small, so nothing is shrunk to fit.
+  function attach() {
+    if (document.body.contains(host)) return;
+
+    document.body.appendChild(host);
+    // A host taken out of the page is dropped by the Toolkit, so it is handed again each time it goes back in.
+    uiSize(host, { fit: false });
+  }
+
+  // Hands a panel to Exiled's Toolkit to be drawn at the player's UI size. Before the Toolkit's script has loaded it
+  // waits in a list the Toolkit reads; without the Toolkit nothing happens.
+  function uiSize(node, options) {
+    const toolkit = window.ExiledUi;
+
+    if (toolkit) {
+      toolkit.size(node, options);
+      return;
+    }
+
+    const waiting = window.__exiledUiWait = window.__exiledUiWait || [];
+
+    waiting.push([node, options]);
+    if (waiting.length > 32) waiting.shift();
+  }
+
   // ---------- the plugin's calls ----------
 
   function open(s) {
@@ -423,7 +451,7 @@
     state.key = (s && s.key) || '';
     state.version = (s && s.version) || '';
 
-    if (!document.body.contains(host)) document.body.appendChild(host);
+    attach();
 
     $('#panel').hidden = false;
     host.style.pointerEvents = 'auto';
@@ -440,7 +468,7 @@
   function update(snap) {
     state.snap = snap;
 
-    if (!document.body.contains(host)) document.body.appendChild(host);
+    attach();
 
     // Methods redraw keeps the filter box, so typing is not interrupted by an update.
     if (state.open && state.tab === 'methods' && $('#methods')) { drawHeader(snap); drawMethods(true); drawFooter(snap); drawOverlay(); return; }
@@ -456,5 +484,6 @@
 
   window.__slperfanalyzer = { open, close, update, toast, report };
   (document.body || document.documentElement).appendChild(host);
+  uiSize(host, { fit: false });
   send('ready');
 })();
