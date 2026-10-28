@@ -30,13 +30,13 @@ Settings live in `BepInEx\config\com.dev.survivallog.perfanalyzer.cfg`, created 
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `Probe` | `true` | Watch the menus from inside the page while recording. |
+| `Probe` | `true` | Watch the menus from inside the page while recording: each mod's script time, and how long each click takes to draw and to finish its fades. |
 | `ScriptTraffic` | `true` | Count the scripts each mod sends to the menus, and their size. |
-| `TagScripts` | `true` | Mark each mod's scripts so the page can time them. Turn it off if a menu mod misbehaves while recording. |
-| `RemoteDebugging` | `true` | Let Chrome's developer tools attach to the menus. While recording, the analyzer also reads the menus' style, layout and script time each second for the report. Needs a game restart. |
+| `TagScripts` | `true` | Mark each mod's scripts from the start of the game so the page can time them and name what they leave running. Turn it off if a menu mod misbehaves while recording. |
+| `RemoteDebugging` | `true` | Let Chrome's developer tools attach to the menus. While recording, the analyzer also reads the menus' style, layout and script time each second for the report, and the panel gets a Trace 10 s button. Needs a game restart. |
 | `RemoteDebuggingPort` | `9222` | Port for Chrome's developer tools. |
 
-With `RemoteDebugging` on, open `chrome://inspect` in Chrome on the same PC, add `localhost:9222` under Configure, and the game's page shows up to inspect, with Chrome's own Performance profiler.
+With `RemoteDebugging` on, open `chrome://inspect` in Chrome on the same PC, add `localhost:9222` under Configure, and the game's page shows up to inspect, with Chrome's own Performance profiler. The Trace 10 s button in the panel records the same kind of trace without Chrome and saves it in BepInEx/performance-analyzer.
 
 ## Overlay
 

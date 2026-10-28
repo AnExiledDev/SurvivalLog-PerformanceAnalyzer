@@ -5,7 +5,8 @@ namespace PerformanceAnalyzer.Core;
 
 /// <summary>
 /// Counts the scripts the game and the mods send into the web UI, by who sent them. A mod's script names its own
-/// global ("window.__slcheatmenu"), so the first such name is the sender; a script with none is the game's.
+/// globals ("window.__slcheatmenu") or posts as itself ("slmod|cheatmenu|"), so those name the sender; a script with
+/// neither is the game's.
 /// Sending a script is cheap for the sender but the page has to parse and run every one, so a mod that sends a big
 /// script many times a second slows the menus down even when its own C# side looks fast.
 /// </summary>
@@ -16,39 +17,121 @@ public sealed class ScriptTraffic
     /// <summary>Exiled's Toolkit names its globals "__exiledtoolkit..." rather than "__sl...", and posts as "toolkit".</summary>
     public const string ToolkitOwner = "toolkit";
 
-    private const string Marker = "__sl";
-    private const string ToolkitMarker = "__exiledtoolkit";
+    private const string PostMarker = "slmod|";
+    private const string ToolkitMarker = "exiledtoolkit";
 
     private readonly Dictionary<string, ScriptCounts> _byOwner = new(StringComparer.Ordinal);
     private readonly object _gate = new();
 
     /// <summary>
-    /// Who sent a script: the lowercase run after the first "__sl", or <see cref="GameOwner"/>. Mods name extra globals
-    /// with a capitalized suffix ("__slcheatmenuCss"), so the suffix is left off. A script with no "__sl" name that
-    /// drives Exiled's Toolkit's globals is <see cref="ToolkitOwner"/>.
+    /// Who sent a script, best evidence first: the mod a "slmod|key|" message in it posts as, then the lowercase run
+    /// after the first "__sl" ("__slcheatmenuCss" gives "cheatmenu"; the shared "__slmod" is skipped), then a
+    /// "__key" global of a loaded mod in <paramref name="known"/> ("__storagehubWords"). Exiled's Toolkit is only the
+    /// sender when nothing else matches, since mods drive its globals from their own scripts. Every key goes through
+    /// <see cref="WebOwners.Canonical"/>, so a mod is one row whichever name it used. Anything else is the game's.
     /// </summary>
-    public static string OwnerOf(string? script)
+    public static string OwnerOf(string? script, IReadOnlySet<string>? known = null)
     {
         if (string.IsNullOrEmpty(script)) return GameOwner;
 
+        var toolkit = false;
+        var posted = FirstPost(script, ref toolkit);
+
+        if (posted != null) return posted;
+
+        var global = FirstGlobal(script, known, ref toolkit);
+
+        if (global != null) return global;
+
+        return toolkit ? ToolkitOwner : GameOwner;
+    }
+
+    public IReadOnlySet<string> Known { get; private set; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>The loaded mods' keys, so a "__key" global names its mod. Set once the plugins are read.</summary>
+    public void SetKnown(IEnumerable<string> modKeys) => Known = WebOwners.Known(modKeys);
+
+    private static string? FirstPost(string script, ref bool toolkit)
+    {
         var from = 0;
 
         while (true)
         {
-            var at = script.IndexOf(Marker, from, StringComparison.Ordinal);
+            var at = script.IndexOf(PostMarker, from, StringComparison.Ordinal);
 
-            if (at < 0) return script.Contains(ToolkitMarker, StringComparison.Ordinal) ? ToolkitOwner : GameOwner;
+            if (at < 0) return null;
 
-            var start = at + Marker.Length;
-            var end = start;
-
-            while (end < script.Length && end - start < 40 && IsKeyChar(script[end])) end++;
-
-            // "__slmod" is the shared message prefix some scripts carry, not a mod's own global.
-            if (end > start && !IsSharedName(script, start, end)) return script.Substring(start, end - start);
+            var start = at + PostMarker.Length;
+            var end = KeyEnd(script, start);
 
             from = Math.Max(end, at + 1);
+
+            if (end == start || end >= script.Length || script[end] != '|') continue;
+
+            var key = WebOwners.Canonical(script.Substring(start, end - start));
+
+            if (key == ToolkitOwner) toolkit = true;
+            else return key;
         }
+    }
+
+    /// <summary>The first "__sl" owner wins over the first known "__key" one, wherever each sits in the script.</summary>
+    private static string? FirstGlobal(string script, IReadOnlySet<string>? known, ref bool toolkit)
+    {
+        string? plain = null;
+        var from = 0;
+
+        while (true)
+        {
+            var at = script.IndexOf("__", from, StringComparison.Ordinal);
+
+            if (at < 0) return plain;
+
+            var start = at + 2;
+            var end = KeyEnd(script, start);
+
+            from = Math.Max(end, at + 1);
+
+            if (end == start) continue;
+
+            var run = script.Substring(start, end - start);
+
+            if (run.StartsWith(ToolkitMarker, StringComparison.Ordinal))
+            {
+                toolkit = true;
+
+                continue;
+            }
+
+            if (run.Length > 2 && run.StartsWith("sl", StringComparison.Ordinal))
+            {
+                // "__slmod" is the shared message prefix some scripts carry, not a mod's own global.
+                if (run == "slmod") continue;
+
+                var key = WebOwners.Canonical(run.Substring(2));
+
+                if (key == ToolkitOwner) toolkit = true;
+                else return key;
+
+                continue;
+            }
+
+            if (plain == null && known != null)
+            {
+                var key = WebOwners.Canonical(run);
+
+                if (key != ToolkitOwner && known.Contains(key)) plain = key;
+            }
+        }
+    }
+
+    private static int KeyEnd(string script, int start)
+    {
+        var end = start;
+
+        while (end < script.Length && end - start < 40 && IsKeyChar(script[end])) end++;
+
+        return end;
     }
 
     /// <summary>Safe from any thread: the web view may be driven off the main thread.</summary>
@@ -86,9 +169,6 @@ public sealed class ScriptTraffic
     }
 
     private static bool IsKeyChar(char c) => c is >= 'a' and <= 'z' or >= '0' and <= '9';
-
-    private static bool IsSharedName(string script, int start, int end) =>
-        end - start == 3 && string.CompareOrdinal(script, start, "mod", 0, 3) == 0;
 
     private sealed class ScriptCounts
     {

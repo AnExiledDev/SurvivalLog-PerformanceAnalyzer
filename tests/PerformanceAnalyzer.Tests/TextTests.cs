@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Globalization;
 using System.Text.Json;
 using PerformanceAnalyzer.Core;
@@ -11,7 +12,8 @@ public class TextTests
     [Theory]
     [InlineData("window.__slcheatmenuCss=\"...\";", "cheatmenu")]
     [InlineData("window.__slcheatmenu&&window.__slcheatmenu.update({})", "cheatmenu")]
-    [InlineData("window.__slmodmenu.open()", "modmenu")]
+    [InlineData("window.__slmodmenu.open()", "toolkit")]
+    [InlineData("window.__sldefenseWords={}", "defensemanager")]
     [InlineData("window.__slmod.x; window.__sltraphub.y()", "traphub")]
     [InlineData("window.__slfarmhubLogic.x()", "farmhub")]
     [InlineData("document.title='x'", "game")]
@@ -19,6 +21,40 @@ public class TextTests
     public void A_script_belongs_to_the_mod_whose_window_object_it_names(string script, string owner)
     {
         Assert.Equal(owner, ScriptTraffic.OwnerOf(script));
+    }
+
+    [Fact]
+    public void A_mod_posting_as_itself_is_the_sender_even_when_it_drives_another_mods_globals()
+    {
+        Assert.Equal("packagebank", ScriptTraffic.OwnerOf("window.__slcheatmenu.x(); vuplex.postMessage('slmod|pkgbank|ready')"));
+        Assert.Equal("cheatmenu", ScriptTraffic.OwnerOf("window.__exiledtoolkit.open(); window.__slcheatmenu.x()"));
+        Assert.Equal("toolkit", ScriptTraffic.OwnerOf("window.__exiledtoolkit.open()"));
+        Assert.Equal("toolkit", ScriptTraffic.OwnerOf("vuplex.postMessage('slmod|modmenu|open')"));
+    }
+
+    [Fact]
+    public void A_plain_global_names_its_mod_only_when_that_mod_is_loaded()
+    {
+        var known = WebOwners.Known(new[] { "storagehub", "nlp" });
+
+        Assert.Equal("storagehub", ScriptTraffic.OwnerOf("window.__storagehubWords={}", known));
+        Assert.Equal("game", ScriptTraffic.OwnerOf("window.__storagehubWords={}"));
+        Assert.Equal("game", ScriptTraffic.OwnerOf("window.__craftinghub.x()", known));
+        Assert.Equal("newloopplus", ScriptTraffic.OwnerOf("window.__newloopplus.x()", known));
+        Assert.Equal("cheatmenu", ScriptTraffic.OwnerOf("window.__storagehubWords; window.__slcheatmenu.x()", known));
+    }
+
+    [Fact]
+    public void Each_mod_has_one_key_whatever_name_it_uses_on_the_page()
+    {
+        Assert.Equal("packagebank", WebOwners.Canonical("pkgbank"));
+        Assert.Equal("toolkit", WebOwners.Canonical("exiledtoolkit"));
+        Assert.Equal("cheatmenu", WebOwners.Canonical("cheatmenu"));
+
+        using var doc = JsonDocument.Parse(WebOwners.ProbeJson(WebOwners.Known(new[] { "storagehub", "craftinghub" })));
+
+        Assert.Equal("packagebank", doc.RootElement.GetProperty("aliases").GetProperty("pkgbank").GetString());
+        Assert.Equal("craftinghub,storagehub", string.Join(",", doc.RootElement.GetProperty("known").EnumerateArray().Select(k => k.GetString())));
     }
 
     [Fact]
@@ -42,6 +78,8 @@ public class TextTests
     [InlineData("slmod|perfanalyzer|unhook", typeof(PageCommand.Unhook))]
     [InlineData("slmod|perfanalyzer|start", typeof(PageCommand.Start))]
     [InlineData("slmod|perfanalyzer|copy", typeof(PageCommand.CopyReport))]
+    [InlineData("slmod|perfanalyzer|trace", typeof(PageCommand.Trace))]
+    [InlineData("slmod|perfanalyzer|trace|5", typeof(PageCommand.Unknown))]
     [InlineData("slmod|perfanalyzer|start|now", typeof(PageCommand.Unknown))]
     [InlineData("slmod|perfanalyzer|tab|nope", typeof(PageCommand.Unknown))]
     [InlineData("slmod|perfanalyzer|deep|Bad Key!", typeof(PageCommand.Unknown))]
@@ -95,6 +133,23 @@ public class TextTests
     private static InstrumentStatus Status => InstrumentStatus.None with { Hooks = 3, Tickers = 1, Notes = new[] { "a note" } };
 
     private static string ReportText(Recorder recorder, string webJson = "") => Report.Text(recorder, new ReportInput(2_000_000, new DateTime(2026, 10, 25, 12, 0, 0), "0.1.0", "1.1.19611", "Windows; CPU", Status, new[] { new ScriptRow("cheatmenu", 4, 4000, 2000) }, webJson, new[] { new ModInfo("moda", "Mod A", "1.0", "com.test.moda") }));
+
+    [Fact]
+    public void The_report_lists_slow_clicks_and_the_fades_they_started()
+    {
+        const string web = """
+            {"fps":60,"seconds":10,"owners":[],"interactions":{"count":2,
+              "pages":[{"page":"main","count":2,"paint":{"n":2,"p50":20,"p95":40,"max":40},"change":{"n":0,"p50":-1,"p95":-1,"max":-1},"settle":{"n":1,"p50":450,"p95":450,"max":450},"worst":{"n":2,"p50":450,"p95":450,"max":450}}],
+              "slowest":[{"page":"main","showing":"TradeMap","what":"click","target":"div.pin \"Rust Town\"","delayMs":2,"handlersMs":9,"paintMs":40,"changeMs":-1,"settleMs":450,"worstGapMs":120,"fade":"transition opacity on div.panel"}],
+              "fades":[{"label":"transition opacity on div.panel","page":"main","count":2,"ms":800,"worstGapMs":120}]}}
+            """;
+        var text = ReportText(Recorded(), web);
+
+        Assert.Contains("clicks and key presses: 2.", text);
+        Assert.Matches(@"main +2 +20 +40 +- +- +450 +450", text);
+        Assert.Matches(@"transition opacity on div\.panel +2 +400 +120", text);
+        Assert.Matches(@"main +TradeMap +2 +9 +40 +- +450 +120  click div\.pin ""Rust Town"" / transition opacity on div\.panel", text);
+    }
 
     [Fact]
     public void The_report_names_the_slow_mod_and_the_hitch_in_plain_ascii()

@@ -10,7 +10,7 @@ namespace PerformanceAnalyzer.Core;
 /// <summary>Everything a report names that the recorder does not hold.</summary>
 /// <param name="WebJson">The web probe's latest summary, or "" when it never sent one.</param>
 /// <param name="System">One line on the machine: OS, processor, memory, graphics card.</param>
-public sealed record ReportInput(long Now, DateTime At, string Version, string GameVersion, string System, InstrumentStatus Status, IReadOnlyList<ScriptRow> Scripts, string WebJson, IReadOnlyList<ModInfo> Loaded);
+public sealed record ReportInput(long Now, DateTime At, string Version, string GameVersion, string System, InstrumentStatus Status, IReadOnlyList<ScriptRow> Scripts, string WebJson, IReadOnlyList<ModInfo> Loaded, string TraceText = "");
 
 /// <summary>
 /// The plain-text report a player pastes into a bug report or a modder reads first. ASCII only, fixed-width columns,
@@ -74,6 +74,7 @@ public static class Report
         WriteSlowMessages(text, recorder);
         WriteBrowser(text, recorder.Game);
         WriteWeb(text, input.WebJson);
+        WriteTrace(text, input.TraceText);
         WriteCoverage(text, input.Status, recorder);
         WriteLoaded(text, input.Loaded);
 
@@ -496,6 +497,8 @@ public static class Report
                     Line(text, $"{Fit(Ascii(key), 20),-20} {Get(owner, "ms"),8:0.0} {Get(owner, "calls"),7:0} {Get(owner, "worstMs"),9:0.0} {Get(owner, "dom"),9:0} {Get(owner, "listeners"),10:0} {Get(owner, "timers"),7:0} {Get(owner, "posts"),9:0}");
                 }
             }
+
+            if (root.TryGetProperty("interactions", out var clicks) && clicks.ValueKind == JsonValueKind.Object) WriteClicks(text, clicks);
         }
         catch (JsonException ex)
         {
@@ -503,6 +506,86 @@ public static class Report
         }
 
         Line(text);
+    }
+
+    private static void WriteTrace(StringBuilder text, string trace)
+    {
+        if (trace.Length == 0) return;
+
+        Heading(text, "Browser trace (the last one taken)");
+
+        foreach (var line in trace.TrimEnd('\n').Split('\n')) Line(text, line);
+
+        Line(text);
+    }
+
+    /// <summary>
+    /// Clicks and key presses while recording: when the next frame came, when the page first changed, and when the
+    /// fades the click started had finished. -1 in the probe means it never happened, shown as "-".
+    /// </summary>
+    private static void WriteClicks(StringBuilder text, JsonElement clicks)
+    {
+        Line(text);
+        Line(text, $"clicks and key presses: {Get(clicks, "count"):0}. Times are ms from the press: frame is the next frame drawn, change the first change anywhere in the page (the HUD changes on its own, so a small number here can be the HUD), settled when every fade or animation the press started had ended.");
+
+        if (Get(clicks, "count") <= 0)
+        {
+            Line(text, "no clicks while recording");
+
+            return;
+        }
+
+        if (clicks.TryGetProperty("pages", out var pages) && pages.ValueKind == JsonValueKind.Array)
+        {
+            Line(text, $"{"clicked in",-20} {"count",6} {"frame p50",10} {"frame p95",10} {"change p50",11} {"change p95",11} {"settled p50",12} {"settled max",12}");
+
+            foreach (var page in pages.EnumerateArray())
+            {
+                var paint = Child(page, "paint");
+                var change = Child(page, "change");
+                var settle = Child(page, "settle");
+
+                Line(text, $"{Fit(Ascii(Str(page, "page")), 20),-20} {Get(page, "count"),6:0} {Ms(paint, "p50"),10} {Ms(paint, "p95"),10} {Ms(change, "p50"),11} {Ms(change, "p95"),11} {Ms(settle, "p50"),12} {Ms(settle, "max"),12}");
+            }
+        }
+
+        if (clicks.TryGetProperty("fades", out var fades) && fades.ValueKind == JsonValueKind.Array && fades.GetArrayLength() > 0)
+        {
+            Line(text, $"{"fade or animation a click started",-60} {"count",6} {"avg ms",7} {"worst frame gap",16}");
+
+            foreach (var fade in fades.EnumerateArray())
+            {
+                var count = Math.Max(1, Get(fade, "count"));
+
+                Line(text, $"{Fit(Ascii(Str(fade, "label")), 60),-60} {Get(fade, "count"),6:0} {Get(fade, "ms") / count,7:0} {Get(fade, "worstGapMs"),16:0}");
+            }
+        }
+
+        if (clicks.TryGetProperty("slowest", out var slowest) && slowest.ValueKind == JsonValueKind.Array && slowest.GetArrayLength() > 0)
+        {
+            Line(text, "slowest clicks:");
+            Line(text, $"{"clicked in",-14} {"showing",-16} {"wait",5} {"code",5} {"frame",6} {"change",7} {"settled",8} {"gap",5}  target / longest fade");
+
+            foreach (var click in slowest.EnumerateArray())
+            {
+                var fade = Str(click, "fade");
+                var what = Ascii(Str(click, "what") + " " + Str(click, "target")) + (fade.Length > 0 ? " / " + Ascii(fade) : "");
+
+                Line(text, $"{Fit(Ascii(Str(click, "page")), 14),-14} {Fit(Ascii(Str(click, "showing")), 16),-16} {Ms(click, "delayMs"),5} {Ms(click, "handlersMs"),5} {Ms(click, "paintMs"),6} {Ms(click, "changeMs"),7} {Ms(click, "settleMs"),8} {Get(click, "worstGapMs"),5:0}  {Fit(what, 120)}");
+            }
+        }
+    }
+
+    private static JsonElement Child(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var child) ? child : default;
+
+    private static string Ms(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Number) return "-";
+
+        var ms = value.GetDouble();
+
+        return ms < 0 ? "-" : ms.ToString("0", Invariant);
     }
 
     private static void WriteCoverage(StringBuilder text, InstrumentStatus status, Recorder recorder)

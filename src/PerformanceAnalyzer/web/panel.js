@@ -29,7 +29,8 @@
     '<button data-act="unhook" title="Stop and remove every probe, so the other mods run untouched">Unhook</button>' +
     '<button data-act="copy" title="Put the plain-text report on the clipboard">Copy report</button>' +
     '<button data-act="save" title="Save the report and a per-frame file to BepInEx/performance-analyzer">Save report</button>' +
-    '<button data-act="overlay" id="ovl" title="Show frame time in the top-right corner with the panel closed">Overlay</button>' +
+    '<button data-act="trace" title="Record the menus with the browser\'s own tracing for 10 seconds and save it to BepInEx/performance-analyzer">Trace 10 s</button>' +
+    '<button data-act="overlay" id="ovl"title="Show frame time in the top-right corner with the panel closed">Overlay</button>' +
     '<button data-act="close" class="x" title="Close (Esc)">X</button>' +
     '</div></header>' +
     '<nav id="tabs"></nav>' +
@@ -360,12 +361,32 @@
       (w
         ? `<div class="tiles">${tile('Page FPS', w.fps.toFixed(0), '')}${tile('Longest gap', F.ms(w.worstGapMs) + ' ms', F.frameClass(w.worstGapMs))}${tile('Long tasks', F.count(w.longTasks) + ' / ' + F.ms(w.longTaskMs) + ' ms', '')}${tile('Script heap', w.heapMB.toFixed(1) + ' MB', '')}${tile('Elements', F.count(w.domNodes), '')}</div>` +
           `<table><tr><th>Script owner</th><th class="n">run ms</th><th class="n">runs</th><th class="n">slowest</th><th class="n">elements</th><th class="n">listeners</th><th class="n">timeouts</th><th class="n">intervals</th><th class="n">observers</th><th class="n">messages</th></tr>${owners}</table>` +
-          '<p class="dim">Run time counts scripts the plugin sent, and timers, listeners and observers they set up while recording, in the main page and in every game page. Listeners and timers a mod made before recording started show under no owner.</p>' +
+          '<p class="dim">Run time counts scripts the plugin sent, and the timers, listeners and observers they set up, in the main page and in every game page. Owners are kept from the start of the game; time is only counted while recording. Scripts a mod sent before the probe first arrived have no owner.</p>' +
           (w.longTasks ? `<p>Long task time no timed script explains: <b>${F.ms(w.longTaskUnownedMs)} ms</b> of ${F.ms(w.longTaskMs)} ms. That is the page's own work: style, layout, painting, or the game's scripts.</p>` : '') +
           (taskPages ? `<table><tr><th>Long tasks on page</th><th class="n">count</th><th class="n">ms</th><th class="n">unexplained ms</th></tr>${taskPages}</table>` : '') +
           (pages ? `<table><tr><th>Page frame</th><th class="n">elements</th><th class="n">listeners</th></tr>${pages}</table><p class="dim">Showing now: ${esc(w.page || 'hud')}. Listeners count those added since the probe arrived.</p>` : '')
-        : '<p class="dim">The web probe is not in the page. It is sent when recording starts, unless [Web] Probe is off.</p>') +
-      '</section>' + browser + slow;
+        : '<p class="dim">The web probe is not in the page. It is sent at the start of the game and checked every couple of seconds, unless [Web] Probe is off.</p>') +
+      '</section>' + drawClicks(w) + browser + slow;
+  }
+
+  // Clicks and key presses while recording, from the probe: how long until the next frame, until the page changed,
+  // and until the fades the click started had finished.
+  function drawClicks(w) {
+    const c = w && w.interactions;
+
+    if (!c) return '';
+
+    const ms = (v) => (v >= 0 ? F.ms(v) : '-');
+    const pages = c.pages.map((p) => `<tr><td>${esc(p.page)}</td><td class="n">${F.count(p.count)}</td><td class="n">${ms(p.paint.p50)}</td><td class="n ${F.frameClass(p.paint.p95)}">${ms(p.paint.p95)}</td><td class="n">${ms(p.change.p50)}</td><td class="n">${ms(p.change.p95)}</td><td class="n">${ms(p.settle.p50)}</td><td class="n">${ms(p.settle.max)}</td></tr>`).join('');
+    const fades = c.fades.map((f) => `<tr><td class="name">${esc(f.label)}</td><td class="n">${F.count(f.count)}</td><td class="n">${F.ms(f.ms / Math.max(1, f.count))}</td><td class="n ${F.frameClass(f.worstGapMs)}">${F.ms(f.worstGapMs)}</td></tr>`).join('');
+    const slow = c.slowest.map((r) => `<tr><td>${esc(r.page)}</td><td>${esc(r.showing)}</td><td class="n">${ms(r.delayMs)}</td><td class="n">${ms(r.handlersMs)}</td><td class="n ${F.frameClass(r.paintMs)}">${ms(r.paintMs)}</td><td class="n">${ms(r.changeMs)}</td><td class="n">${ms(r.settleMs)}</td><td class="n ${F.frameClass(r.worstGapMs)}">${F.ms(r.worstGapMs)}</td><td class="name">${esc(r.what + ' ' + r.target)}${r.fade ? '<br><span class="dim">' + esc(r.fade) + '</span>' : ''}</td></tr>`).join('');
+
+    return '<section><h3>Clicks</h3>' + (c.count
+      ? `<table><tr><th>Clicked in</th><th class="n">count</th><th class="n">frame p50</th><th class="n">frame p95</th><th class="n">change p50</th><th class="n">change p95</th><th class="n">settled p50</th><th class="n">settled max</th></tr>${pages}</table>` +
+        (fades ? `<table><tr><th>Fade or animation a click started</th><th class="n">count</th><th class="n">avg ms</th><th class="n">worst gap</th></tr>${fades}</table>` : '') +
+        `<table><tr><th>Clicked in</th><th>Showing</th><th class="n">wait</th><th class="n">code</th><th class="n">frame</th><th class="n">change</th><th class="n">settled</th><th class="n">gap</th><th>Target, longest fade</th></tr>${slow}</table>` +
+        '<p class="dim">Milliseconds from the press. Frame: the next frame drawn. Change: the first change anywhere in the page (the HUD changes on its own). Settled: every fade or animation the press started has ended. Gap: the longest wait between frames meanwhile.</p>'
+      : '<p class="dim">No clicks yet. Record, then click around the page that feels slow.</p>') + '</section>';
   }
 
   function drawReport() {

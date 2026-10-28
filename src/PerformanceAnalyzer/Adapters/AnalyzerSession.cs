@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using PerformanceAnalyzer.Core;
 using UnityEngine;
 
@@ -34,6 +35,7 @@ internal sealed class AnalyzerSession
     private readonly WebPage _page;
     private readonly ScriptTraffic _traffic;
     private readonly BrowserMetrics? _browser;
+    private readonly BrowserTrace? _trace;
     private readonly string _reportDir;
     private readonly string _version;
     private readonly Action<bool> _saveOverlay;
@@ -46,8 +48,9 @@ internal sealed class AnalyzerSession
     private PanelTab _tab = PanelTab.Overview;
     private float _nextPushAt;
     private string _webJson = "";
+    private string _probeNames = "{}";
 
-    public AnalyzerSession(Recorder recorder, PluginIndex plugins, Instrumenter instrumenter, FrameSource frames, WebPage page, ScriptTraffic traffic, BrowserMetrics? browser, string reportDir, string version, Action<bool> saveOverlay, Action<string> log)
+    public AnalyzerSession(Recorder recorder, PluginIndex plugins, Instrumenter instrumenter, FrameSource frames, WebPage page, ScriptTraffic traffic, BrowserMetrics? browser, BrowserTrace? trace, string reportDir, string version, Action<bool> saveOverlay, Action<string> log)
     {
         _recorder = recorder;
         _plugins = plugins;
@@ -56,6 +59,7 @@ internal sealed class AnalyzerSession
         _page = page;
         _traffic = traffic;
         _browser = browser;
+        _trace = trace;
         _reportDir = reportDir;
         _version = version;
         _saveOverlay = saveOverlay;
@@ -101,6 +105,8 @@ internal sealed class AnalyzerSession
             // By the first frame every plugin has loaded.
             _hasReadPlugins = true;
             _plugins.ReadPlugins();
+            _traffic.SetKnown(_plugins.Loaded.Select(mod => mod.Key));
+            _probeNames = WebOwners.ProbeJson(_traffic.Known);
             _log($"{_plugins.Loaded.Count} plugins loaded");
         }
 
@@ -109,8 +115,13 @@ internal sealed class AnalyzerSession
 
         if (markers > 0) _log($"{markers} new markers, {Markers.Registry.Count} in all");
 
+        // The probe and the script tags run from the start of the game, so the listeners and timers mods set up when
+        // they first send their scripts have an owner; the probe only times anything while recording.
+        _page.WantsProbe = Settings.WebProbe;
         _page.WantsPanel = _isOpen || Overlay;
-        _page.KeepInstalled(time);
+        ScriptCounter.IsTagging = Settings.WebProbe && Settings.TagScripts;
+        ScriptCounter.IsCounting = _recorder.IsRecording && Settings.ScriptTraffic;
+        _page.KeepInstalled(time, WebPage.ProbeState(_recorder.IsRecording));
 
         if (Settings.Key != KeyCode.None && Input.GetKeyDown(Settings.Key)) Toggle();
 
@@ -133,6 +144,11 @@ internal sealed class AnalyzerSession
             {
                 if (_recorder.IsRecording) _recorder.Game.NoteWeb(reading);
             }
+        }
+
+        if (_trace != null)
+        {
+            while (_trace.TryTakeMessage(out var message)) _page.Toast(message);
         }
 
         if ((_isOpen || Overlay) && time >= _nextPushAt)
@@ -190,7 +206,9 @@ internal sealed class AnalyzerSession
                 _page.InstallPanel();
                 break;
             case PageCommand.NoProbe:
+                if (!Settings.WebProbe) break;
                 _page.InstallProbe();
+                _page.ProbeNames(_probeNames);
                 _page.ProbeRecording(_recorder.IsRecording, Settings.TagScripts);
                 break;
             case PageCommand.Start:
@@ -212,6 +230,11 @@ internal sealed class AnalyzerSession
                 break;
             case PageCommand.SaveReport:
                 Save(true);
+                break;
+            case PageCommand.Trace:
+                if (_trace == null) _page.Toast("A trace needs [Web] RemoteDebugging on and a game restart.");
+                else if (!_trace.Start(_traffic.Known)) _page.Toast("A trace is already running.");
+                else _page.Toast($"Tracing the menus for {BrowserTrace.Seconds} s. Close the panel and use the slow page now.");
                 break;
             case PageCommand.ShowTab tab:
                 _tab = tab.Tab;
@@ -255,14 +278,8 @@ internal sealed class AnalyzerSession
 
         if (_browser != null) _browser.IsWanted = true;
         ScriptCounter.IsCounting = Settings.ScriptTraffic;
-        ScriptCounter.IsTagging = Settings.ScriptTraffic && Settings.TagScripts;
 
-        if (Settings.WebProbe)
-        {
-            _page.WantsProbe = true;
-            _page.InstallProbe();
-            _page.ProbeRecording(true, Settings.TagScripts);
-        }
+        if (Settings.WebProbe) _page.ProbeRecording(true, Settings.TagScripts);
 
         _log("recording started");
     }
@@ -276,7 +293,6 @@ internal sealed class AnalyzerSession
         if (_browser != null) _browser.IsWanted = false;
 
         ScriptCounter.IsCounting = false;
-        ScriptCounter.IsTagging = false;
         _page.ProbeRecording(false, false);
         _log($"recording stopped after {_recorder.FrameCount} frames, {_recorder.HitchCount} hitches");
     }
@@ -290,7 +306,7 @@ internal sealed class AnalyzerSession
         _log("numbers cleared");
     }
 
-    private string ReportText() => Report.Text(_recorder, new ReportInput(Stopwatch.GetTimestamp(), DateTime.Now, _version, Application.version, Machine.Describe(), _instrumenter.Status, _traffic.Rows(), _webJson, _plugins.Loaded));
+    private string ReportText() => Report.Text(_recorder, new ReportInput(Stopwatch.GetTimestamp(), DateTime.Now, _version, Application.version, Machine.Describe(), _instrumenter.Status, _traffic.Rows(), _webJson, _plugins.Loaded, _trace?.LastText ?? ""));
 
     private void Save(bool tellPanel)
     {

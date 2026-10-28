@@ -17,7 +17,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.5.3";
+    private const string Version = "0.6.0";
 
     public override void Load()
     {
@@ -51,17 +51,17 @@ public sealed class Plugin : BasePlugin
             "Mods to leave untimed, by plugin id or short key, separated by commas. Use it when a mod breaks while timed.\n" +
             "不统计的模组，填写插件 ID 或简称，用逗号分隔。某个模组在被统计时出错时使用。");
         var webProbe = Config.Bind("Web", "Probe", true,
-            "Watch the menus from inside the page while recording: page frame rate, long tasks, memory, page elements and timers per mod.\n" +
-            "记录时从页面内部监测菜单：页面帧率、长任务、内存，以及各模组的页面元素与计时器。");
+            "Watch the menus from inside the page while recording: page frame rate, long tasks, memory, page elements and timers per mod, and how long each click takes to show its answer and finish its fades.\n" +
+            "记录时从页面内部监测菜单：页面帧率、长任务、内存，各模组的页面元素与计时器，以及每次点击多久显示结果、多久完成淡入淡出。");
         var scriptTraffic = Config.Bind("Web", "ScriptTraffic", true,
             "Count the scripts each mod sends to the menus while recording, and their size.\n" +
             "记录时统计各模组发送到菜单的脚本数量与大小。");
         var tagScripts = Config.Bind("Web", "TagScripts", true,
-            "Mark each mod's scripts so the page can time how long each mod's scripts run. Turn it off if a menu mod misbehaves while recording.\n" +
-            "为各模组的脚本加上标记，以便页面统计每个模组脚本的运行时间。如果记录时某个菜单模组出现异常，请关闭此项。");
+            "Mark each mod's scripts from the start of the game, so the page can tell which mod made each timer and listener and time each mod's scripts while recording. Turn it off if a menu mod misbehaves.\n" +
+            "从游戏开始就为各模组的脚本加上标记，以便页面分辨每个计时器与监听器来自哪个模组，并在记录时统计每个模组脚本的运行时间。如果某个菜单模组出现异常，请关闭此项。");
         var remoteDebugging = Config.Bind("Web", "RemoteDebugging", true,
-            "Let Chrome's developer tools attach to the game's menus: open chrome://inspect in Chrome and add localhost and the port below. While recording, the analyzer also reads the menus' style, layout and script time each second for the report. Needs a game restart.\n" +
-            "允许 Chrome 开发者工具连接到游戏菜单：在 Chrome 中打开 chrome://inspect，并添加 localhost 与下面的端口。记录时，分析器还会每秒读取菜单的样式、布局与脚本耗时并写入报告。需要重启游戏。");
+            "Let Chrome's developer tools attach to the game's menus: open chrome://inspect in Chrome and add localhost and the port below. While recording, the analyzer also reads the menus' style, layout and script time each second for the report, and the Trace button records the menus for 10 seconds. Needs a game restart.\n" +
+            "允许 Chrome 开发者工具连接到游戏菜单：在 Chrome 中打开 chrome://inspect，并添加 localhost 与下面的端口。记录时，分析器还会每秒读取菜单的样式、布局与脚本耗时并写入报告；「Trace 10 s」按钮可录制菜单 10 秒。需要重启游戏。");
         var remotePort = Config.Bind("Web", "RemoteDebuggingPort", 9222,
             "Port for Chrome's developer tools when RemoteDebugging is on. Needs a game restart.\n" +
             "开启 RemoteDebugging 时 Chrome 开发者工具使用的端口。需要重启游戏。");
@@ -75,8 +75,10 @@ public sealed class Plugin : BasePlugin
         var plugins = new PluginIndex(recorder);
         var traffic = new ScriptTraffic();
         var browser = remoteDebugging.Value ? new BrowserMetrics(remotePort.Value, log.Write) : null;
-        var session = new AnalyzerSession(recorder, plugins, new Instrumenter(recorder, plugins, Guid, log.Write), new FrameSource(log.Write), new WebPage(log.Write), traffic, browser,
-            Path.Combine(Paths.BepInExRootPath, "performance-analyzer"), Version, isOn => overlay.Value = isOn, log.Write);
+        var reportDir = Path.Combine(Paths.BepInExRootPath, "performance-analyzer");
+        var trace = remoteDebugging.Value ? new BrowserTrace(remotePort.Value, reportDir, log.Write) : null;
+        var session = new AnalyzerSession(recorder, plugins, new Instrumenter(recorder, plugins, Guid, log.Write), new FrameSource(log.Write), new WebPage(log.Write), traffic, browser, trace,
+            reportDir, Version, isOn => overlay.Value = isOn, log.Write);
 
         log.Write($"===== Performance Analyzer {Version} started");
         Probes.Attach(recorder);

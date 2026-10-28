@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- The Web tab and the report now time every click and key press in the menus: how long until the page drew again, and how long until the fades and transitions the click started had finished. The slowest clicks are listed with what was clicked, and the fades that ran longest are listed with the element they ran on.
+- New Trace 10 s button in the panel (needs RemoteDebugging). It records the browser for 10 seconds and saves the trace, a CPU profile and a short summary in BepInEx/performance-analyzer: main thread time by kind, the busiest scripts and which mod sent them, frames drawn, garbage collections and long tasks. The report shows the last summary.
+- The page probe now starts with the game, so timers, listeners and observers a mod leaves running are named even when they were made before recording started. Time is still counted only while recording.
+- Exiled's Toolkit and its Mod Menu scripts now count under one Toolkit row, and a mod that names itself in more than one way on the page gets one row.
+- Mods whose page code uses a plain name like __storagehub are now named, when that mod is loaded.
+
 ## 0.5.3
 
 - Fixed: with RemoteDebugging on, nothing listened on the port, so the report said the browser's style, layout and script time were not read. The port now stays in the browser's launch arguments when the game or WebUI Doctor sets them.

@@ -37,6 +37,9 @@ public abstract record PageCommand
 
     public sealed record SaveReport : PageCommand;
 
+    /// <summary>Record the web UI with the browser's own tracing for a few seconds.</summary>
+    public sealed record Trace : PageCommand;
+
     /// <summary>Which tab the panel shows, so each update carries only what that tab draws.</summary>
     public sealed record ShowTab(PanelTab Tab) : PageCommand;
 
@@ -76,6 +79,7 @@ public abstract record PageCommand
             "unhook" when hasNoArgs => new Unhook(),
             "copy" when hasNoArgs => new CopyReport(),
             "save" when hasNoArgs => new SaveReport(),
+            "trace" when hasNoArgs => new Trace(),
             "tab" when Tabs.TryParse(rest, out var tab) => new ShowTab(tab),
             "deep" when IsModKey(rest) => new Deep(rest),
             "overlay" when rest is "0" or "1" => new Overlay(rest == "1"),
