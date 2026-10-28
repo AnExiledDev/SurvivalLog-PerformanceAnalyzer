@@ -17,7 +17,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.5.1";
+    private const string Version = "0.5.2";
 
     public override void Load()
     {
@@ -59,7 +59,7 @@ public sealed class Plugin : BasePlugin
         var tagScripts = Config.Bind("Web", "TagScripts", true,
             "Mark each mod's scripts so the page can time how long each mod's scripts run. Turn it off if a menu mod misbehaves while recording.\n" +
             "为各模组的脚本加上标记，以便页面统计每个模组脚本的运行时间。如果记录时某个菜单模组出现异常，请关闭此项。");
-        var remoteDebugging = Config.Bind("Web", "RemoteDebugging", false,
+        var remoteDebugging = Config.Bind("Web", "RemoteDebugging", true,
             "Let Chrome's developer tools attach to the game's menus: open chrome://inspect in Chrome and add localhost and the port below. While recording, the analyzer also reads the menus' style, layout and script time each second for the report. Needs a game restart.\n" +
             "允许 Chrome 开发者工具连接到游戏菜单：在 Chrome 中打开 chrome://inspect，并添加 localhost 与下面的端口。记录时，分析器还会每秒读取菜单的样式、布局与脚本耗时并写入报告。需要重启游戏。");
         var remotePort = Config.Bind("Web", "RemoteDebuggingPort", 9222,

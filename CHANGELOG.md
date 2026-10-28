@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+- RemoteDebugging is now on by default, so a recording also has the menus' style, layout and script time. A config file that already has it off keeps it off.
+
 ## 0.5.1
 
 - The panel, the corner overlay and the notices can be drawn bigger or smaller with the UI size setting of Exiled's Toolkit 0.10.0 or newer. A change shows at once.
