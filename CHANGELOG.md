@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- New TraceKey setting, End by default: it starts the 10 second trace without opening the panel. The notices now show with the panel closed too.
+
 ## 0.6.0
 
 - The Web tab and the report now time every click and key press in the menus: how long until the page drew again, and how long until the fades and transitions the click started had finished. The slowest clicks are listed with what was clicked, and the fades that ran longest are listed with the element they ran on.

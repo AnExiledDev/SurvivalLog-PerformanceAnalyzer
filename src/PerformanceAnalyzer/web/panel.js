@@ -29,7 +29,7 @@
     '<button data-act="unhook" title="Stop and remove every probe, so the other mods run untouched">Unhook</button>' +
     '<button data-act="copy" title="Put the plain-text report on the clipboard">Copy report</button>' +
     '<button data-act="save" title="Save the report and a per-frame file to BepInEx/performance-analyzer">Save report</button>' +
-    '<button data-act="trace" title="Record the menus with the browser\'s own tracing for 10 seconds and save it to BepInEx/performance-analyzer">Trace 10 s</button>' +
+    '<button data-act="trace" title="Record the menus with the browser\'s own tracing for 10 seconds and save it to BepInEx/performance-analyzer. The TraceKey (End) does the same with the panel closed">Trace 10 s</button>' +
     '<button data-act="overlay" id="ovl"title="Show frame time in the top-right corner with the panel closed">Overlay</button>' +
     '<button data-act="close" class="x" title="Close (Esc)">X</button>' +
     '</div></header>' +
@@ -431,6 +431,8 @@
   function toast(text) {
     const el = $('#toast');
 
+    // The notice also shows with the panel closed, for the trace key.
+    attach();
     el.textContent = String(text);
     el.hidden = false;
     clearTimeout(state.toastTimer);

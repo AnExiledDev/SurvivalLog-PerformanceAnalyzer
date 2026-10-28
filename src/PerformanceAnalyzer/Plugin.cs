@@ -17,7 +17,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.6.0";
+    private const string Version = "0.6.1";
 
     public override void Load()
     {
@@ -26,6 +26,9 @@ public sealed class Plugin : BasePlugin
         var panelKey = Config.Bind("Controls", "PanelKey", KeyCode.Insert,
             "Key that opens and closes the Performance Analyzer panel, Insert by default. None turns the key off.\n" +
             "打开和关闭性能分析器面板的按键，默认 Insert。设为 None 则停用该按键。");
+        var traceKey = Config.Bind("Controls", "TraceKey", KeyCode.End,
+            "Key that records the menus for 10 seconds with the browser's own tracing, the same as the Trace 10 s button, without opening the panel. Needs [Web] RemoteDebugging. End by default. None turns the key off.\n" +
+            "无需打开面板即可用浏览器自带的追踪录制菜单 10 秒的按键，与「Trace 10 s」按钮相同。需要开启 [Web] RemoteDebugging。默认 End。设为 None 则停用该按键。");
         var autoStart = Config.Bind("Recording", "AutoStartSeconds", 0f,
             "Start recording on its own this many seconds after the game starts, to catch slow loading. 0 waits for the Start button.\n" +
             "游戏启动多少秒后自动开始记录，用于捕捉加载时的卡顿。0 表示等待点击「开始」。");
@@ -96,12 +99,13 @@ public sealed class Plugin : BasePlugin
 
         OptionalLive.Watch(() => session.Settings = new SessionSettings(
             panelKey.Value,
+            traceKey.Value,
             autoStart.Value,
             saveOnQuit.Value,
             new ProbeOptions(patches.Value, tickers.Value, gameTime.Value, exclude.Value.Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToArray()),
             webProbe.Value,
             scriptTraffic.Value,
-            tagScripts.Value), panelKey, autoStart, saveOnQuit, patches, tickers, gameTime, exclude, webProbe, scriptTraffic, tagScripts);
+            tagScripts.Value), panelKey, traceKey, autoStart, saveOnQuit, patches, tickers, gameTime, exclude, webProbe, scriptTraffic, tagScripts);
         OptionalLive.Watch(hitchMs, ms => recorder.HitchMs = Math.Max(1, ms));
         OptionalLive.Watch(windowFrames, frames => recorder.SetWindow(Math.Max(16, frames)));
         OptionalLive.Watch(overlay, isOn => session.Overlay = isOn);

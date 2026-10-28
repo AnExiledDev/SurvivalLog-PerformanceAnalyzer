@@ -10,6 +10,7 @@ namespace PerformanceAnalyzer.Adapters;
 /// <summary>Settings the session reads every frame; the plugin replaces them when the config changes.</summary>
 internal sealed record SessionSettings(
     KeyCode Key,
+    KeyCode TraceKey,
     float AutoStartSeconds,
     bool SaveOnQuit,
     ProbeOptions Probes,
@@ -27,6 +28,9 @@ internal sealed class AnalyzerSession
 
     /// <summary>The Methods and Hitches lists are the largest snapshots, so they refresh half as often.</summary>
     private const float SlowPushSeconds = 1f;
+
+    /// <summary>How long a notice that missed the panel script is still worth showing once the script is in.</summary>
+    private const float NoticeSeconds = 4f;
 
     private readonly Recorder _recorder;
     private readonly PluginIndex _plugins;
@@ -49,6 +53,8 @@ internal sealed class AnalyzerSession
     private float _nextPushAt;
     private string _webJson = "";
     private string _probeNames = "{}";
+    private string _notice = "";
+    private float _noticeAt;
 
     public AnalyzerSession(Recorder recorder, PluginIndex plugins, Instrumenter instrumenter, FrameSource frames, WebPage page, ScriptTraffic traffic, BrowserMetrics? browser, BrowserTrace? trace, string reportDir, string version, Action<bool> saveOverlay, Action<string> log)
     {
@@ -67,7 +73,7 @@ internal sealed class AnalyzerSession
         _selfProbe = recorder.AddProbe(new ProbeInfo("Performance Analyzer (panel, probes, reports)", ProbeKind.Analyzer, "", new[] { Recorder.AnalyzerMod }));
     }
 
-    public SessionSettings Settings { get; set; } = new(KeyCode.Insert, 0, true, new ProbeOptions(true, true, true, Array.Empty<string>()), true, true, true);
+    public SessionSettings Settings { get; set; } = new(KeyCode.Insert, KeyCode.End, 0, true, new ProbeOptions(true, true, true, Array.Empty<string>()), true, true, true);
 
     public bool Overlay { get; set; }
 
@@ -124,6 +130,7 @@ internal sealed class AnalyzerSession
         _page.KeepInstalled(time, WebPage.ProbeState(_recorder.IsRecording));
 
         if (Settings.Key != KeyCode.None && Input.GetKeyDown(Settings.Key)) Toggle();
+        if (Settings.TraceKey != KeyCode.None && Input.GetKeyDown(Settings.TraceKey)) StartTrace();
 
         while (PageMessages.TryTake(out var command)) Handle(command);
 
@@ -148,7 +155,7 @@ internal sealed class AnalyzerSession
 
         if (_trace != null)
         {
-            while (_trace.TryTakeMessage(out var message)) _page.Toast(message);
+            while (_trace.TryTakeMessage(out var message)) Notice(message);
         }
 
         if ((_isOpen || Overlay) && time >= _nextPushAt)
@@ -172,6 +179,25 @@ internal sealed class AnalyzerSession
         _isOpen = true;
         InputGate.PanelOpened();
         Push();
+    }
+
+    private void StartTrace()
+    {
+        if (_trace == null) Notice("A trace needs [Web] RemoteDebugging on and a game restart.");
+        else if (!_trace.Start(_traffic.Known)) Notice("A trace is already running.");
+        else Notice($"Tracing the menus for {BrowserTrace.Seconds} s. {(_isOpen ? "Close the panel and use" : "Use")} the slow page now.");
+    }
+
+    /// <summary>
+    /// A notice at the bottom of the screen, shown with the panel open or closed. With the panel never opened and the
+    /// overlay off the panel script is not in the page yet, so the first call only asks for it and the notice is shown
+    /// again once the script is ready.
+    /// </summary>
+    private void Notice(string text)
+    {
+        _notice = text;
+        _noticeAt = Time.unscaledTime;
+        _page.Toast(text);
     }
 
     private void Close()
@@ -201,6 +227,8 @@ internal sealed class AnalyzerSession
                 _log("panel script ready");
                 // A reload loses the panel; open it again where it was.
                 if (_isOpen && _page.Open(State())) Push();
+                // A notice sent before the panel script was in the page only asked for the script; show it now.
+                if (_notice.Length > 0 && Time.unscaledTime - _noticeAt < NoticeSeconds) _page.Toast(_notice);
                 break;
             case PageCommand.NoScript:
                 _page.InstallPanel();
@@ -223,18 +251,16 @@ internal sealed class AnalyzerSession
             case PageCommand.Unhook:
                 Stop();
                 _instrumenter.Deactivate();
-                _page.Toast("Probes removed. Start adds them again.");
+                Notice("Probes removed. Start adds them again.");
                 break;
             case PageCommand.CopyReport:
-                _page.Toast(Machine.Copy(ReportText(), _log) ? "Report copied to the clipboard." : "Could not copy. Use Save report instead.");
+                Notice(Machine.Copy(ReportText(), _log) ? "Report copied to the clipboard." : "Could not copy. Use Save report instead.");
                 break;
             case PageCommand.SaveReport:
                 Save(true);
                 break;
             case PageCommand.Trace:
-                if (_trace == null) _page.Toast("A trace needs [Web] RemoteDebugging on and a game restart.");
-                else if (!_trace.Start(_traffic.Known)) _page.Toast("A trace is already running.");
-                else _page.Toast($"Tracing the menus for {BrowserTrace.Seconds} s. Close the panel and use the slow page now.");
+                StartTrace();
                 break;
             case PageCommand.ShowTab tab:
                 _tab = tab.Tab;
@@ -324,13 +350,13 @@ internal sealed class AnalyzerSession
             File.WriteAllText(Path.Combine(_reportDir, $"seconds-{stamp}.csv"), Report.SecondsCsv(_recorder));
             _log("report saved to " + report);
 
-            if (tellPanel) _page.Toast("Saved to BepInEx/performance-analyzer/report-" + stamp + ".txt");
+            if (tellPanel) Notice("Saved to BepInEx/performance-analyzer/report-" + stamp + ".txt");
         }
         catch (Exception ex)
         {
             _log("could not save the report: " + ex.Message);
 
-            if (tellPanel) _page.Toast("Could not save the report: " + ex.Message);
+            if (tellPanel) Notice("Could not save the report: " + ex.Message);
         }
     }
 }

@@ -7,6 +7,7 @@ Settings live in `BepInEx\config\com.dev.survivallog.perfanalyzer.cfg`, created 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `PanelKey` | `Insert` | Key that opens and closes the panel. `None` turns the key off. |
+| `TraceKey` | `End` | Key that does the same as the Trace 10 s button without opening the panel. Needs `RemoteDebugging`. `None` turns the key off. |
 
 ## Recording
 
