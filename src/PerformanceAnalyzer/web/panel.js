@@ -36,8 +36,9 @@
     '<nav id="tabs"></nav>' +
     '<main id="main"></main>' +
     '<footer id="foot"></footer>' +
-    '<div id="toast" hidden></div>' +
-    '</div>';
+    '</div>' +
+    // Outside the panel, so a notice shows with the panel closed too.
+    '<div id="toast" hidden></div>';
 
   const state = { open: false, tab: 'overview', key: '', version: '', snap: null, report: '', sort: { methods: ['selfPerFrame', false], mods: ['avg', false] }, filter: '', side: 'mods', toastTimer: 0 };
   const RATING = { fine: 'good', watch: 'warn', heavy: 'bad' };
@@ -431,7 +432,7 @@
   function toast(text) {
     const el = $('#toast');
 
-    // The notice also shows with the panel closed, for the trace key.
+    // A notice also shows with the panel closed, for the trace key.
     attach();
     el.textContent = String(text);
     el.hidden = false;

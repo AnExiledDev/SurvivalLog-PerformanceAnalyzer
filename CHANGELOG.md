@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2
+
+- Fixed: the trace notices did not show with the panel closed.
+- Fixed: one script the browser had already thrown away stopped the trace from naming the mods of all the others.
+
 ## 0.6.1
 
 - New TraceKey setting, End by default: it starts the 10 second trace without opening the panel. The notices now show with the panel closed too.

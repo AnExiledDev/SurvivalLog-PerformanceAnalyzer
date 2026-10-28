@@ -177,13 +177,25 @@ internal sealed class BrowserTrace
             await Ask(socket, "Debugger.enable", "", watch, SlowAskTimeout).ConfigureAwait(false);
             await Ask(socket, "Debugger.setSkipAllPauses", "{\"skip\":true}", watch, AskTimeout).ConfigureAwait(false);
 
+            var missed = 0;
+
             foreach (var id in TraceSummary.HotScripts(profile, HotScripts))
             {
-                var answer = await Ask(socket, "Debugger.getScriptSource", "{\"scriptId\":" + JsText.Literal(id) + "}", watch, AskTimeout).ConfigureAwait(false);
-                var source = Field(answer, "result", "scriptSource");
+                // A script from a page that has since closed or reloaded is gone; the others can still be read.
+                try
+                {
+                    var answer = await Ask(socket, "Debugger.getScriptSource", "{\"scriptId\":" + JsText.Literal(id) + "}", watch, AskTimeout).ConfigureAwait(false);
+                    var source = Field(answer, "result", "scriptSource");
 
-                if (source.Length > 0) owners[id] = TraceSummary.OwnerOfSource(source, known);
+                    if (source.Length > 0) owners[id] = TraceSummary.OwnerOfSource(source, known);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException && socket.State == WebSocketState.Open)
+                {
+                    missed++;
+                }
             }
+
+            if (missed > 0) _log($"{missed} traced scripts were gone before they could be read, so the profile counts them as unknown");
         }
         catch (Exception ex)
         {

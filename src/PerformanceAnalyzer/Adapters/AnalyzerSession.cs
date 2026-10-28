@@ -184,7 +184,7 @@ internal sealed class AnalyzerSession
     private void StartTrace()
     {
         if (_trace == null) Notice("A trace needs [Web] RemoteDebugging on and a game restart.");
-        else if (!_trace.Start(_traffic.Known)) Notice("A trace is already running.");
+        else if (!_trace.Start(_traffic.Known)) { _log("trace asked for while one was running"); Notice("A trace is already running. Wait for it to be saved."); }
         else Notice($"Tracing the menus for {BrowserTrace.Seconds} s. {(_isOpen ? "Close the panel and use" : "Use")} the slow page now.");
     }
 

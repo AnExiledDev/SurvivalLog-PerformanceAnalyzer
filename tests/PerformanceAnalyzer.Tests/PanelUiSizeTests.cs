@@ -8,7 +8,7 @@ public class PanelUiSizeTests
 {
     // Just enough of Root.html for panel.js to load, open and update: elements that keep their children, and a shadow
     // root whose every element is a plain stand-in.
-    private const string FakePage = """
+    internal const string FakePage = """
         var window = this;
         window.vuplex = { postMessage: function () {} };
         function setTimeout() { return 1; }
