@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3
+
+- Fixed: with RemoteDebugging on, nothing listened on the port, so the report said the browser's style, layout and script time were not read. The port now stays in the browser's launch arguments when the game or WebUI Doctor sets them.
+
 ## 0.5.2
 
 - RemoteDebugging is now on by default, so a recording also has the menus' style, layout and script time. A config file that already has it off keeps it off.

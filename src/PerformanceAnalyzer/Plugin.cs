@@ -17,7 +17,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.5.2";
+    private const string Version = "0.5.3";
 
     public override void Load()
     {
@@ -86,7 +86,11 @@ public sealed class Plugin : BasePlugin
         ScriptCounter.Apply(harmony, traffic, log.Write);
         SlowMessages.Apply(harmony, recorder, log.Write);
 
-        if (remoteDebugging.Value) WebPage.EnableRemoteDebugging(remotePort.Value, log.Write);
+        if (remoteDebugging.Value)
+        {
+            WebPage.EnableRemoteDebugging(remotePort.Value, log.Write);
+            DebugPortHook.Apply(harmony, remotePort.Value, log.Write);
+        }
 
         OptionalLive.Watch(() => session.Settings = new SessionSettings(
             panelKey.Value,
