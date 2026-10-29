@@ -54,6 +54,15 @@ public abstract record PageCommand
     /// <summary>The game page now showing, as the web probe sees it: "hud", "PhoneSMS", or several joined with '+'.</summary>
     public sealed record Showing(string Page) : PageCommand;
 
+    /// <summary>The page's answer to a ping: its number and the page's clock when it answered. The game sets At when it arrives.</summary>
+    public sealed record Pong(int Id, double PageMs, long At = 0) : PageCommand;
+
+    /// <summary>The frames the page drew during a latency check, as "counter,ms;...".</summary>
+    public sealed record HopFrames(string Text) : PageCommand;
+
+    /// <summary>The mouse moves the page got during a latency check, as "ms;...".</summary>
+    public sealed record HopMoves(string Text) : PageCommand;
+
     public sealed record Unknown(string Text) : PageCommand;
 
     public static bool IsOurs(string? message) => message is not null && message.StartsWith(Prefix, StringComparison.Ordinal);
@@ -85,8 +94,22 @@ public abstract record PageCommand
             "overlay" when rest is "0" or "1" => new Overlay(rest == "1"),
             "web" when rest.StartsWith("{", StringComparison.Ordinal) => new Web(rest),
             "page" when IsPageName(rest) => new Showing(rest),
+            "pong" => ParsePong(rest) ?? (PageCommand)new Unknown(message),
+            "hopframes" => new HopFrames(rest),
+            "hopmoves" => new HopMoves(rest),
             _ => new Unknown(message),
         };
+    }
+
+    private static Pong? ParsePong(string rest)
+    {
+        var at = rest.IndexOf('|');
+
+        if (at < 0) return null;
+        if (!int.TryParse(rest.Substring(0, at), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var id)) return null;
+        if (!double.TryParse(rest.Substring(at + 1), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ms)) return null;
+
+        return new Pong(id, ms);
     }
 
     /// <summary>A mod key is short lowercase letters and digits, or empty.</summary>

@@ -44,6 +44,11 @@
   let pageTimer = 0;
   let page = 'hud';
   let sentPage = '';
+  const HOP_MAX = 2048;
+  let hopOn = false;
+  let hopDot = null;
+  let hopFrames = [];
+  let hopMoves = [];
 
   // Start and end of each stretch of timed script, newest last, so a long task can say how much of it no script
   // explains.
@@ -445,6 +450,7 @@
     try {
       own.add.call(win, 'click', start, true);
       own.add.call(win, 'keydown', start, true);
+      own.add.call(win, 'mousemove', () => { if (hopOn && hopMoves.length < HOP_MAX) hopMoves.push(now().toFixed(2)); }, { capture: true, passive: true });
     } catch (e) { return; }
 
     // The browser's own event timing, where it has it: input delay, handler time and time to the next paint, exact.
@@ -857,8 +863,53 @@
     return (named ? 'n' : '') + (on ? 'r' : '');
   }
 
+  // The latency check the plugin runs beside a trace. ping(k) answers at once with the page's clock, so the plugin
+  // can time a message both ways and line the two clocks up. hop(true) paints a 4 px counter in the top-left corner
+  // that changes every frame the page draws; the plugin reads it back from the game's copy of the page to tell which
+  // page frame each game frame shows, and how late. hop(false) removes it and sends the frame and mouse move times.
+  function ping(k) {
+    send('pong|' + k + '|' + now().toFixed(2));
+  }
+
+  function hopColor(c) {
+    return 'rgb(' + (4 * (Math.floor(c / 64) % 32) + 2) + ',' + (4 * (c % 64) + 2) + ',255)';
+  }
+
+  function hopFrame() {
+    if (!hopOn || hopFrames.length >= HOP_MAX) return;
+
+    if (hopDot) hopDot.style.backgroundColor = hopColor(hopFrames.length);
+
+    hopFrames.push(hopFrames.length + ',' + now().toFixed(2));
+    native.raf.call(window, hopFrame);
+  }
+
+  function hop(isOn) {
+    if (isOn && !hopOn) {
+      hopOn = true;
+      hopFrames = [];
+      hopMoves = [];
+
+      try {
+        hopDot = document.createElement('div');
+        hopDot.style.cssText = 'position:fixed;left:0;top:0;width:4px;height:4px;margin:0;padding:0;border:0;pointer-events:none;z-index:2147483647;background-color:' + hopColor(0);
+        document.documentElement.appendChild(hopDot);
+      } catch (e) { hopDot = null; }
+
+      native.raf.call(window, hopFrame);
+    } else if (!isOn && hopOn) {
+      hopOn = false;
+
+      try { if (hopDot) hopDot.remove(); } catch (e) { /* the page went away with it */ }
+
+      hopDot = null;
+      send('hopframes|' + hopFrames.join(';'));
+      send('hopmoves|' + hopMoves.join(';'));
+    }
+  }
+
   maintain();
   native.setInterval.call(window, maintain, MAINTAIN_MS);
 
-  window.__slperfprobe = { ctx, record, reset, summary, ownerOf, names, state, isRecording: () => on, showingPage, noteLongTask };
+  window.__slperfprobe = { ctx, record, reset, summary, ownerOf, names, state, isRecording: () => on, showingPage, noteLongTask, ping, hop };
 })();

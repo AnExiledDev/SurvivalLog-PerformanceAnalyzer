@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2
+
+- The 10 second trace now also times the game's side of the menus, from inside the game: how long a message takes to reach the page and come back, which of the frames the page draws reach the game screen and how late, the longest the screen kept one frame, and how long a mouse move takes to reach the page. It saves these to latency-<time>.txt and adds them to the report. A small coloured dot shows in the top-left corner while it runs. This works without RemoteDebugging too.
+- Made for Survival Log 1.1.19611.
+
 ## 0.7.1
 
 - The 10 second trace now follows the menus' frames from the page to the game screen: frames the page made, frames the browser drew, frames it copied for the game, and frames that reached the game, each per second, with the stage where the most are lost and why the copy skipped any. This shows lag that comes after the page has drawn.

@@ -54,7 +54,10 @@ internal static class PageMessages
         {
             if (!PageCommand.IsOurs(serializedMessage)) return true;
 
-            Queue.Enqueue(PageCommand.Parse(serializedMessage));
+            var command = PageCommand.Parse(serializedMessage);
+
+            // Stamped here, on arrival, since the queue waits for the next frame.
+            Queue.Enqueue(command is PageCommand.Pong pong ? pong with { At = System.Diagnostics.Stopwatch.GetTimestamp() } : command);
 
             return false;
         }

@@ -109,6 +109,15 @@ internal sealed class WebPage
 
     public void ProbeReset() => Run("window.__slperfprobe&&window.__slperfprobe.reset()");
 
+    /// <summary>Asks the probe to answer at once with its clock; see <see cref="HopProbe"/>.</summary>
+    public bool Ping(int id) => Run($"window.__slperfprobe&&window.__slperfprobe.ping({id})");
+
+    /// <summary>Shows or removes the probe's frame counter in the page's top-left corner.</summary>
+    public bool Hop(bool isOn) => Run($"window.__slperfprobe&&window.__slperfprobe.hop({(isOn ? "true" : "false")})");
+
+    /// <summary>The game's copy of the page, the texture the game draws the menus from.</summary>
+    public static UnityEngine.Texture2D? Texture() => WebView()?.Texture;
+
     private bool Call(string expression) => Run($"window.__slperfanalyzer?window.__slperfanalyzer.{expression}:{NoScriptReply}");
 
     private static IWebView? WebView() => GameSingleton.Existing<ReduxUISystem>()?.GetWebUILayer()?.canvasWebViewPrefab?.WebView;

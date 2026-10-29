@@ -40,6 +40,7 @@ internal sealed class AnalyzerSession
     private readonly ScriptTraffic _traffic;
     private readonly BrowserMetrics? _browser;
     private readonly BrowserTrace? _trace;
+    private readonly HopProbe _hop;
     private readonly string _reportDir;
     private readonly string _version;
     private readonly Action<bool> _saveOverlay;
@@ -70,6 +71,7 @@ internal sealed class AnalyzerSession
         _version = version;
         _saveOverlay = saveOverlay;
         _log = log;
+        _hop = new HopProbe(page, reportDir, recorder.TicksPerMs, log);
         _selfProbe = recorder.AddProbe(new ProbeInfo("Performance Analyzer (panel, probes, reports)", ProbeKind.Analyzer, "", new[] { Recorder.AnalyzerMod }));
     }
 
@@ -134,6 +136,8 @@ internal sealed class AnalyzerSession
 
         while (PageMessages.TryTake(out var command)) Handle(command);
 
+        _hop.Tick(time);
+
         if (!_hasAutoStarted && Settings.AutoStartSeconds > 0 && time >= Settings.AutoStartSeconds)
         {
             _hasAutoStarted = true;
@@ -183,6 +187,9 @@ internal sealed class AnalyzerSession
 
     private void StartTrace()
     {
+        // The game's side is timed with or without the browser's trace, which needs remote debugging.
+        _hop.Start(Time.unscaledTime, BrowserTrace.Seconds);
+
         if (_trace == null) Notice("A trace needs [Web] RemoteDebugging on and a game restart.");
         else if (!_trace.Start(_traffic.Known)) { _log("trace asked for while one was running"); Notice("A trace is already running. Wait for it to be saved."); }
         else Notice($"Tracing the menus for {BrowserTrace.Seconds} s. {(_isOpen ? "Close the panel and use" : "Use")} the slow page now.");
@@ -282,6 +289,9 @@ internal sealed class AnalyzerSession
             case PageCommand.Showing showing:
                 _recorder.SetPage(showing.Page);
                 break;
+            case PageCommand.Pong or PageCommand.HopFrames or PageCommand.HopMoves:
+                _hop.Take(command);
+                break;
             case PageCommand.Unknown unknown:
                 _log("panel: " + unknown.Text);
                 break;
@@ -332,7 +342,7 @@ internal sealed class AnalyzerSession
         _log("numbers cleared");
     }
 
-    private string ReportText() => Report.Text(_recorder, new ReportInput(Stopwatch.GetTimestamp(), DateTime.Now, _version, Application.version, Machine.Describe(), _instrumenter.Status, _traffic.Rows(), _webJson, _plugins.Loaded, _trace?.LastText ?? ""));
+    private string ReportText() => Report.Text(_recorder, new ReportInput(Stopwatch.GetTimestamp(), DateTime.Now, _version, Application.version, Machine.Describe(), _instrumenter.Status, _traffic.Rows(), _webJson, _plugins.Loaded, (_trace?.LastText ?? "") + (_hop.LastText.Length > 0 ? "\n" + _hop.LastText : "")));
 
     private void Save(bool tellPanel)
     {
