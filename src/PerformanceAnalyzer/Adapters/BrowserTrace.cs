@@ -25,9 +25,10 @@ internal sealed class BrowserTrace
     private static readonly TimeSpan AskTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan SlowAskTimeout = TimeSpan.FromSeconds(60);
 
-    // What Chrome's Performance tab records, without screenshots.
+    // What Chrome's Performance tab records, without screenshots, plus the browser's compositor (viz) and its frame
+    // capture (gpu.capture): the game gets the menus as captured frames, so those show where frames are lost.
     private const string TraceConfig = "{\"transferMode\":\"ReturnAsStream\",\"traceConfig\":{\"recordMode\":\"recordAsMuchAsPossible\",\"includedCategories\":[" +
-        "\"toplevel\",\"devtools.timeline\",\"disabled-by-default-devtools.timeline\",\"disabled-by-default-devtools.timeline.frame\",\"v8.execute\",\"blink.user_timing\",\"latencyInfo\"]}}";
+        "\"toplevel\",\"devtools.timeline\",\"disabled-by-default-devtools.timeline\",\"disabled-by-default-devtools.timeline.frame\",\"v8.execute\",\"blink.user_timing\",\"latencyInfo\",\"viz\",\"gpu.capture\"]}}";
 
     private readonly int _port;
     private readonly string _dir;

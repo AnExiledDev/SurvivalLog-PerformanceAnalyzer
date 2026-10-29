@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- The 10 second trace now follows the menus' frames from the page to the game screen: frames the page made, frames the browser drew, frames it copied for the game, and frames that reached the game, each per second, with the stage where the most are lost and why the copy skipped any. This shows lag that comes after the page has drawn.
+- Made for Survival Log 1.1.19611.
+
 ## 0.7.0
 
 - New: `UiScale` under Interface sets the size of Performance Analyzer's own windows on their own, from 75% to 200%, whatever Exiled's Toolkit's UI size is. At 0, the default, they follow the Toolkit's. Needs Exiled's Toolkit 0.11.0 or newer.

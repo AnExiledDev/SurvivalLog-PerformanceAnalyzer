@@ -12,7 +12,7 @@ namespace PerformanceAnalyzer.Core;
 /// thread spent its time: script, style, layout, paint, garbage collection, which events and which functions, and the
 /// long tasks. Self time is used throughout, so nested work is counted once, under the innermost event.
 /// </summary>
-public static class TraceSummary
+public static partial class TraceSummary
 {
     private const double LongTaskMs = 50;
 
@@ -134,6 +134,7 @@ public static class TraceSummary
         var mains = new HashSet<(int, int)>();
         var slices = new List<Slice>();
         var frames = new List<long>();
+        var delivery = new FrameDelivery();
         long first = long.MaxValue, last = long.MinValue;
 
         foreach (var e in events.EnumerateArray())
@@ -163,11 +164,14 @@ public static class TraceSummary
             if (name == "DrawFrame" && ph != "e" && ph != "E") frames.Add(ts);
 
             if (ph == "X") slices.Add(new Slice(ts, (long)Num(e, "dur"), name, tid, pid, Detail(e, name)));
+
+            delivery.Add(e, ph, name, ts);
         }
 
         var seconds = last > first ? (last - first) / 1e6 : 0;
 
         Line(text, $"trace of {seconds:0.0} s");
+        delivery.Write(text, first, seconds);
 
         // The page's main thread: of the threads named CrRendererMain, the busiest one.
         var main = slices.Where(s => mains.Contains((s.Pid, s.Tid))).GroupBy(s => (s.Pid, s.Tid)).OrderByDescending(g => g.Sum(s => s.Dur)).FirstOrDefault();
