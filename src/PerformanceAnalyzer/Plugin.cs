@@ -17,11 +17,13 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.6.2";
+    private const string Version = "0.7.0";
 
     public override void Load()
     {
         if (!OptionalLive.IsToolkitInstalled) Log.LogInfo(OptionalLive.MissingNote);
+
+        OptionalUiSize.Bind(Config);
 
         var panelKey = Config.Bind("Controls", "PanelKey", KeyCode.Insert,
             "Key that opens and closes the Performance Analyzer panel, Insert by default. None turns the key off.\n" +

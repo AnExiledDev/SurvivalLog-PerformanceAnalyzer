@@ -78,6 +78,7 @@ public class PanelUiSizeTests
 
         // Opening and updating find the host still in the page, so the Toolkit is not handed it again.
         Assert.Equal(1, js.Evaluate("handed.length").AsNumber());
+        Assert.Equal(1, js.Evaluate("handed.filter(function (h) { return h.options.mod === 'PerformanceAnalyzer'; }).length").AsNumber());
         Assert.Equal("slperfanalyzer-host", js.Evaluate("handed[0].el.id").AsString());
         // The panel is pinned inside the window's edges, so it always fits.
         Assert.True(Is(js, "handed[0].options.fit === false"));
