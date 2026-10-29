@@ -22,6 +22,7 @@
     <Reference Include="$(BepInExCore)\Il2CppInterop.Runtime.dll" Private="false" />
     <Reference Include="$(BepInExCore)\Il2CppInterop.Common.dll" Private="false" />
     <Reference Include="$(Interop)\HotUpdate.dll" Private="false" />
+    <Reference Include="$(Interop)\AOT.dll" Private="false" />
     <Reference Include="$(Interop)\Il2Cppmscorlib.dll" Private="false" />
     <Reference Include="$(Interop)\UnityEngine.CoreModule.dll" Private="false" />
     <Reference Include="$(Interop)\UnityEngine.IMGUIModule.dll" Private="false" />
@@ -43,7 +44,7 @@
     <AssemblyMetadata Include="ModManager.Description" Value="A developer tool that finds what makes the game slow. It times every other mod's hooks and update methods, the game code inside hooked methods, and the scripts each mod runs in the menus, and records every frame that stutters with what ran in it. Press Insert for the panel. Copy report puts a plain summary on the clipboard.&#10;一个查找游戏卡顿来源的开发者工具。它统计其他每个模组的钩子与更新方法、被钩住的游戏代码，以及各模组在菜单中运行的脚本所用的时间，并记录每一个卡顿帧及其中运行的内容。按 Insert 打开面板。「复制报告」会把一份简明摘要放到剪贴板。" />
     <AssemblyMetadata Include="ModManager.Author" Value="AnExiledDev" />
     <AssemblyMetadata Include="ModManager.Category" Value="Tools" />
-    <AssemblyMetadata Include="ModManager.GameVersion" Value="1.1.19611" />
+    <AssemblyMetadata Include="ModManager.GameVersion" Value="1.1.20151" />
     <AssemblyMetadata Include="ModManager.Settings" Value="Live" />
     <AssemblyMetadata Include="ModManager.GitHub" Value="AnExiledDev/SurvivalLog-PerformanceAnalyzer" />
     <AssemblyMetadata Include="ModManager.Changelog" Value="https://github.com/AnExiledDev/SurvivalLog-PerformanceAnalyzer/blob/main/CHANGELOG.md" />

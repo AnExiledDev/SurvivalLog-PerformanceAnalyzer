@@ -38,6 +38,7 @@ internal sealed class AnalyzerSession
     private readonly FrameSource _frames;
     private readonly WebPage _page;
     private readonly ScriptTraffic _traffic;
+    private readonly WebKeyboard _keyboard = new();
     private readonly BrowserMetrics? _browser;
     private readonly BrowserTrace? _trace;
     private readonly HopProbe _hop;
@@ -211,6 +212,7 @@ internal sealed class AnalyzerSession
     {
         _isOpen = false;
         _page.Close();
+        _keyboard.Release();
         InputGate.PanelClosed();
     }
 
@@ -232,6 +234,8 @@ internal sealed class AnalyzerSession
                 break;
             case PageCommand.Ready:
                 _log("panel script ready");
+                // A new panel script starts with nothing focused.
+                _keyboard.Release();
                 // A reload loses the panel; open it again where it was.
                 if (_isOpen && _page.Open(State())) Push();
                 // A notice sent before the panel script was in the page only asked for the script; show it now.
@@ -278,6 +282,12 @@ internal sealed class AnalyzerSession
                 if (!_instrumenter.IsActive) _instrumenter.Activate(Settings.Probes, Time.unscaledTime);
                 _instrumenter.SetDeep(deep.ModKey);
                 Push();
+                break;
+            case PageCommand.Focus { IsOn: true }:
+                if (_isOpen) _keyboard.Claim();
+                break;
+            case PageCommand.Focus:
+                _keyboard.Release();
                 break;
             case PageCommand.Overlay overlay:
                 Overlay = overlay.IsOn;

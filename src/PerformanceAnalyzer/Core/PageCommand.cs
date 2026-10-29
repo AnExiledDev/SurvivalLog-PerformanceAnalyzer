@@ -48,6 +48,9 @@ public abstract record PageCommand
 
     public sealed record Overlay(bool IsOn) : PageCommand;
 
+    /// <summary>The panel's filter box took the keyboard (on) or let go of it (off).</summary>
+    public sealed record Focus(bool IsOn) : PageCommand;
+
     /// <summary>The web probe's summary of the last second, as JSON.</summary>
     public sealed record Web(string Json) : PageCommand;
 
@@ -92,6 +95,7 @@ public abstract record PageCommand
             "tab" when Tabs.TryParse(rest, out var tab) => new ShowTab(tab),
             "deep" when IsModKey(rest) => new Deep(rest),
             "overlay" when rest is "0" or "1" => new Overlay(rest == "1"),
+            "focus" when rest is "0" or "1" => new Focus(rest == "1"),
             "web" when rest.StartsWith("{", StringComparison.Ordinal) => new Web(rest),
             "page" when IsPageName(rest) => new Showing(rest),
             "pong" => ParsePong(rest) ?? (PageCommand)new Unknown(message),

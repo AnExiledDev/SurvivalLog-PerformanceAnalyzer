@@ -96,6 +96,9 @@ public class TextTests
         Assert.Equal(new PageCommand.Deep("cheatmenu"), PageCommand.Parse("slmod|perfanalyzer|deep|cheatmenu"));
         Assert.Equal(new PageCommand.Deep(""), PageCommand.Parse("slmod|perfanalyzer|deep|"));
         Assert.Equal(new PageCommand.Overlay(true), PageCommand.Parse("slmod|perfanalyzer|overlay|1"));
+        Assert.Equal(new PageCommand.Focus(true), PageCommand.Parse("slmod|perfanalyzer|focus|1"));
+        Assert.Equal(new PageCommand.Focus(false), PageCommand.Parse("slmod|perfanalyzer|focus|0"));
+        Assert.IsType<PageCommand.Unknown>(PageCommand.Parse("slmod|perfanalyzer|focus|2"));
         Assert.Equal(new PageCommand.Web("{\"a\":\"x|y\"}"), PageCommand.Parse("slmod|perfanalyzer|web|{\"a\":\"x|y\"}"));
     }
 

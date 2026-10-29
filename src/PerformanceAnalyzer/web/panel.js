@@ -73,6 +73,24 @@
     drawMethods(true);
   });
 
+  // The game sends typed keys to the web UI only while it is told a text box has focus, so the panel tells the
+  // plugin when the filter box takes the keyboard and when it lets go. Focus has moved by the time the timer runs;
+  // each update checks again, for a box that was redrawn or hidden without a focusout.
+  let typing = false;
+
+  function syncTyping() {
+    const field = root.activeElement;
+    const now = state.open && !!field && field.id === 'filter' && !$('#panel').hidden;
+
+    if (now === typing) return;
+
+    typing = now;
+    send('focus|' + (now ? '1' : '0'));
+  }
+
+  root.addEventListener('focusin', () => setTimeout(syncTyping, 0));
+  root.addEventListener('focusout', () => setTimeout(syncTyping, 0));
+
   document.addEventListener('keydown', (e) => {
     if (state.open && e.key === 'Escape') { e.stopPropagation(); send('close'); }
   }, true);
@@ -487,6 +505,7 @@
     state.open = false;
     $('#panel').hidden = true;
     host.style.pointerEvents = 'none';
+    syncTyping();
     draw();
   }
 
@@ -494,6 +513,7 @@
     state.snap = snap;
 
     attach();
+    syncTyping();
 
     // Methods redraw keeps the filter box, so typing is not interrupted by an update.
     if (state.open && state.tab === 'methods' && $('#methods')) { drawHeader(snap); drawMethods(true); drawFooter(snap); drawOverlay(); return; }
