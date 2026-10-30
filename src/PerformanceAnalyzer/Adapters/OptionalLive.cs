@@ -51,6 +51,35 @@ internal static class OptionalLive
         }
     }
 
+    /// <summary>
+    /// Whether a text box in any mod's page has the keyboard, read through Exiled's Toolkit 0.12.0 or newer. Without the
+    /// Toolkit, or with an older one, it is always false and the keys work as before. A cached delegate, so a key check
+    /// allocates nothing.
+    /// </summary>
+    public static readonly Func<bool> IsTyping = ReadTyping;
+
+    private static bool _isTypingUnavailable;
+
+    private static bool ReadTyping()
+    {
+        if (_isTypingUnavailable || !IsToolkitInstalled) return false;
+
+        try
+        {
+            return ReadTypingWithToolkit();
+        }
+        catch (Exception ex) when (ex is TypeLoadException or MissingMemberException or FileNotFoundException or FileLoadException)
+        {
+            _isTypingUnavailable = true;
+            Log.Value.LogWarning("Exiled's Toolkit is older than 0.12.0, so the keys also work while typing in a text box: " + ex.Message);
+
+            return false;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool ReadTypingWithToolkit() => ExiledToolkit.Typing.IsActive;
+
     // Kept in its own method so the Toolkit's types are only looked up when it is installed.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void WatchWithToolkit(Action apply, ConfigEntryBase[] entries) => ExiledToolkit.LiveSettings.Watch(apply, entries);

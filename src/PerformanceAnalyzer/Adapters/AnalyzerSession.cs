@@ -76,6 +76,8 @@ internal sealed class AnalyzerSession
         _selfProbe = recorder.AddProbe(new ProbeInfo("Performance Analyzer (panel, probes, reports)", ProbeKind.Analyzer, "", new[] { Recorder.AnalyzerMod }));
     }
 
+    private static readonly Func<KeyCode, bool> IsKeyDown = Input.GetKeyDown;
+
     public SessionSettings Settings { get; set; } = new(KeyCode.Insert, KeyCode.End, 0, true, new ProbeOptions(true, true, true, Array.Empty<string>()), true, true, true);
 
     public bool Overlay { get; set; }
@@ -132,8 +134,9 @@ internal sealed class AnalyzerSession
         ScriptCounter.IsCounting = _recorder.IsRecording && Settings.ScriptTraffic;
         _page.KeepInstalled(time, WebPage.ProbeState(_recorder.IsRecording));
 
-        if (Settings.Key != KeyCode.None && Input.GetKeyDown(Settings.Key)) Toggle();
-        if (Settings.TraceKey != KeyCode.None && Input.GetKeyDown(Settings.TraceKey)) StartTrace();
+        // A key typed into a text box, the panel's filter or another mod's search, is text, not a toggle.
+        if (KeyGate.Fires(Settings.Key, KeyCode.None, IsKeyDown, OptionalLive.IsTyping)) Toggle();
+        if (KeyGate.Fires(Settings.TraceKey, KeyCode.None, IsKeyDown, OptionalLive.IsTyping)) StartTrace();
 
         while (PageMessages.TryTake(out var command)) Handle(command);
 
