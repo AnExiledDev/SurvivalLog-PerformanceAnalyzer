@@ -5,7 +5,7 @@ namespace PerformanceAnalyzer.Core;
 
 /// <summary>What the engine clock and the game world did in one frame; all zero when nothing could be read.</summary>
 /// <param name="TimeScale">The engine's time scale (Time.timeScale).</param>
-/// <param name="GameSpeed">The game's own speed setting, 0 outside a game.</param>
+/// <param name="GameSpeed">The game's speed setting, 0 outside a game.</param>
 /// <param name="DeltaSeconds">Game time the engine handed out this frame (Time.deltaTime).</param>
 /// <param name="UnscaledSeconds">Real time of the frame as the engine saw it (Time.unscaledDeltaTime).</param>
 /// <param name="MaxDeltaSeconds">The engine's cap on one frame's game time (Time.maximumDeltaTime).</param>
@@ -37,7 +37,7 @@ public readonly record struct WorldReading(
 
 /// <summary>Memory in bytes, read about once a second; 0 means that reading is not available in this game build.</summary>
 /// <param name="ModsHeap">The mods' .NET heap.</param>
-/// <param name="GameHeap">The game's own script heap.</param>
+/// <param name="GameHeap">The game's script heap.</param>
 /// <param name="UnityAllocated">Memory the engine has handed out.</param>
 /// <param name="UnityReserved">Memory the engine has taken from the system.</param>
 /// <param name="Textures">Memory the loaded textures use.</param>

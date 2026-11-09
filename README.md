@@ -8,7 +8,7 @@ This is a development tool for testing mods. It is not released and has no Nexus
 
 1. Press `Insert` in game to open the panel.
 2. Press **Start** and play the part of the game that feels slow for a minute.
-3. Read the **Overview** tab: the verdict at the top says whether mods are a real part of the frame time, and which one costs the most. The **Game** tab shows the game's own frame rate, world updates, speed and memory.
+3. Read the **Overview** tab: the verdict at the top says whether mods are a real part of the frame time, and which one costs the most. The **Game** tab shows the game's frame rate, world updates, speed and memory.
 4. Press **Copy report** to put a text report on the clipboard, or **Save** to write it to a file.
 
 `Esc` or the close button closes the panel. Recording keeps going while it is closed.
@@ -17,7 +17,7 @@ This is a development tool for testing mods. It is not released and has no Nexus
 
 - **Frame time**: average, p50, p95, p99 and the worst frame, with a graph of the latest frames.
 - **Each mod's own time**: the time spent inside every other mod's Harmony patches and Update methods, per frame and per second, with the memory each one allocates. A patch shared by two mods is split evenly between them.
-- **Hook cost**: the extra time a hooked game method takes just because it is hooked, and the game's own time inside hooked methods.
+- **Hook cost**: the extra time a hooked game method takes just because it is hooked, and the game's time inside hooked methods.
 - **Stutters (hitches)**: every frame over 50 ms is kept with the methods and mods that ran longest in it, the scene, and whether a garbage collection ran. Each one gets a likely cause.
 - **Methods**: every timed patch and Update method, sortable and with a filter.
 - **Deep profile**: the Deep button on a mod's row also times every method in that mod, to find the slow one inside it.
@@ -61,7 +61,7 @@ Each marker shows as its own row, kind `marker`, in the Methods tab, the report 
 
 ## What it can't see
 
-- Time spent in the game's own code outside hooked methods is shown as "rest of game", not split further.
+- Time spent in the game's code outside hooked methods is shown as "rest of game", not split further.
 - Work a mod does on another thread is counted, but not timed.
 - Timers and listeners a mod set up in the menus before recording started are not counted for that mod.
 

@@ -219,7 +219,7 @@
       `<td class="n">${F.ms(s.mean)}</td><td class="n">${F.ms(s.p50)}</td><td class="n">${F.ms(s.p95)}</td><td class="n ${F.frameClass(s.p99)}">${F.ms(s.p99)}</td><td class="n">${F.ms(s.max)}</td>` +
       `<td class="n">${F.percent(s.over16)}</td><td class="n">${F.percent(s.over33)}</td><td class="n">${F.count(s.hitches)}</td><td class="n">${s.logic.toFixed(1)}</td></tr>`).join('');
     const speeds = (snap.speeds || []).map((s) => `<span>${speedText(s.speed)} <b>${F.percent(s.pct)}</b></span>`).join('');
-    const memTiles = [['game', 'Game script heap', 'The game\'s own script memory. Growing every minute in a long session can mean a leak.'],
+    const memTiles = [['game', 'Game script heap', 'The game\'s script memory. Growing every minute in a long session can mean a leak.'],
       ['mods', 'Mods\' heap', 'Memory of the mods\' .NET runtime, shared by every mod.'],
       ['unity', 'Engine allocated', 'Memory the engine has handed out.'],
       ['reserved', 'Engine reserved', 'Memory the engine has taken from the system.'],
@@ -353,7 +353,7 @@
     const kept = snap.hitchesKept < snap.hitchCount ? ` <span class="dim">(the last ${F.count(snap.hitchesKept)} of ${F.count(snap.hitchCount)})</span>` : '';
 
     $('#main').innerHTML = (groups ? `<section><h3>Hitches by cause${kept}</h3><table><tr><th class="n">count</th><th class="n">typical ms</th><th class="n">worst ms</th><th class="n">worst</th><th>Cause</th><th>Slowest method</th></tr>${groups}</table><p class="dim">Typical is the median frame time of the group. The slowest method is named when it took a fifth of the frame or more.</p></section>` : '') +
-      `<p class="dim">Frames slower than ${F.ms(snap.hitchMs)} ms, newest first. "Rest" is time no probe saw: the game's own updates, rendering, loading, or garbage collection.</p>` + (cards || '<p class="dim">No hitches yet.</p>');
+      `<p class="dim">Frames slower than ${F.ms(snap.hitchMs)} ms, newest first. "Rest" is time no probe saw: the game's updates, rendering, loading, or garbage collection.</p>` + (cards || '<p class="dim">No hitches yet.</p>');
   }
 
   function drawWeb(snap) {

@@ -14,7 +14,7 @@ namespace PerformanceAnalyzer.Core;
 /// </summary>
 public sealed class Recorder
 {
-    /// <summary>Mod id 0: the game itself, charged with the game's own code inside hooked methods.</summary>
+    /// <summary>Mod id 0: the game itself, charged with the game's code inside hooked methods.</summary>
     public const int GameMod = 0;
 
     /// <summary>Mod id 1: this mod, charged with its own work.</summary>
@@ -556,7 +556,7 @@ public sealed class ModTotals
 
 /// <summary>What the adapter knows about a frame that the probes do not: garbage collections and the engine's own timings.</summary>
 /// <param name="ManagedGcs">Collections by the mods' .NET runtime during the frame.</param>
-/// <param name="GameGcs">Collections by the game's own runtime during the frame.</param>
+/// <param name="GameGcs">Collections by the game's runtime during the frame.</param>
 /// <param name="Engine">The engine's frame timings, when the game has them turned on.</param>
 /// <param name="Scene">Where the player was, for a hitch ("home", "map", "menu").</param>
 /// <param name="World">The engine clock and the game world this frame.</param>
@@ -569,7 +569,7 @@ public readonly record struct EngineTimes(float MainThreadMs, float RenderThread
 /// <param name="Page">The page showing, as an id for <see cref="Recorder.PageName"/>; 0 when unknown.</param>
 public readonly record struct FrameSample(float Ms, float ModsMs, float HookMs, float GameMs, float AnalyzerMs, short ManagedGcs, short GameGcs, EngineTimes Engine, WorldReading World = default, short Page = 0)
 {
-    /// <summary>Time no probe saw: the game's own work outside hooked methods, rendering and waiting.</summary>
+    /// <summary>Time no probe saw: the game's work outside hooked methods, rendering and waiting.</summary>
     public float RestMs => Math.Max(0, Ms - ModsMs - HookMs - GameMs - AnalyzerMs);
 }
 

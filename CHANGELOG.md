@@ -56,7 +56,7 @@
 
 ## 0.5.0
 
-- The Web tab now counts the timers, listeners and observers mods leave inside the game's own pages, not just the main page.
+- The Web tab now counts the timers, listeners and observers mods leave inside the game's pages, not just the main page.
 - Exiled's Toolkit gets its own row in the Web tab. Its scripts used to count as the game's.
 - Long tasks in the menus now show how much of their time no mod's script explains, and which page was open.
 - Every frame and every second in the CSV files names the game page that was open, and so does each hitch.
@@ -73,7 +73,7 @@
 - Each hitch now shows the analyzer's own time, so its parts add up to the frame.
 - Every mod gets a rating: fine, watch or heavy. Mods that never took measurable time are folded into one line.
 - The verdict names up to three stutter makers instead of one.
-- Mod methods and the game's own code inside hooks are listed apart (Methods tab buttons, two report tables). Allocations read as KB/s or MB/s.
+- Mod methods and the game's code inside hooks are listed apart (Methods tab buttons, two report tables). Allocations read as KB/s or MB/s.
 - The game clock section of the report is written as plain sentences.
 
 ## 0.3.0

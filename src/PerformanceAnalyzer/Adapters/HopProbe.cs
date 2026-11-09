@@ -10,7 +10,7 @@ using UnityEngine.Rendering;
 namespace PerformanceAnalyzer.Adapters;
 
 /// <summary>
-/// Runs beside each trace for the same few seconds and times what the browser's trace cannot see: the game's own
+/// Runs beside each trace for the same few seconds and times what the browser's trace cannot see: the game's
 /// side of the web UI. Every 100 ms it pings the page; every frame it notes the mouse and asks the graphics card for
 /// one column of the game's copy of the page, where the probe paints a frame counter in the corner. When it ends the
 /// page sends the times of the frames it drew and the moves it got, and the summary goes to latency-{stamp}.txt.

@@ -5,7 +5,7 @@ using GameCore.Scripts;
 namespace PerformanceAnalyzer.Adapters;
 
 /// <summary>
-/// Sends the keyboard to the web UI while the panel's filter box has focus, the way the game's own crafting search
+/// Sends the keyboard to the web UI while the panel's filter box has focus, the way the game's crafting search
 /// does, and gives it back as it was found. The game keeps the system's input method (for typing Chinese) off while
 /// playing and turns it on only while one of its own text boxes has focus, so the filter box turns it on too, and off
 /// again when it lets go.

@@ -17,11 +17,11 @@ public enum ProbeKind
 
     /// <summary>
     /// The managed wrapper Harmony builds around a hooked game method, minus what runs inside it that has its own probe
-    /// (the patches and the game's own code). What is left is the cost of hooking that method at all.
+    /// (the patches and the game's code). What is left is the cost of hooking that method at all.
     /// </summary>
     Hook,
 
-    /// <summary>The game's own code inside a hooked game method.</summary>
+    /// <summary>The game's code inside a hooked game method.</summary>
     Game,
 
     /// <summary>A mod method that another mod patched: its own body.</summary>

@@ -50,7 +50,7 @@ public sealed class Plugin : BasePlugin
             "Time the Update, LateUpdate, FixedUpdate and OnGUI methods of every other mod.\n" +
             "统计其他每个模组的 Update、LateUpdate、FixedUpdate 与 OnGUI 方法的耗时。");
         var gameTime = Config.Bind("Probes", "GameTime", true,
-            "Inside a hooked game method, time the game's own code apart from the mods' patches.\n" +
+            "Inside a hooked game method, time the game's code apart from the mods' patches.\n" +
             "在被钩住的游戏方法内，把游戏自身代码的耗时与模组补丁分开统计。");
         var exclude = Config.Bind("Probes", "Exclude", "",
             "Mods to leave untimed, by plugin id or short key, separated by commas. Use it when a mod breaks while timed.\n" +

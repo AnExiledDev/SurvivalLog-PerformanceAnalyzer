@@ -11,7 +11,7 @@ namespace PerformanceAnalyzer.Core;
 /// <param name="DeepMethods">Methods timed by the deep profile.</param>
 /// <param name="Pending">Methods still waiting in the queue.</param>
 /// <param name="Failed">Methods Harmony refused to patch.</param>
-/// <param name="Untimeable">Transpilers and IL edits: they change the game's own code, so their cost is part of the hook or game time.</param>
+/// <param name="Untimeable">Transpilers and IL edits: they change the game's code, so their cost is part of the hook or game time.</param>
 /// <param name="Notes">The first few failures, for the report.</param>
 public sealed record InstrumentStatus(int Hooks, int Patches, int Tickers, int DeepMethods, int Pending, int Failed, int Untimeable, string DeepMod, IReadOnlyList<string> Notes)
 {
@@ -54,10 +54,10 @@ public enum MethodSide
 {
     All,
 
-    /// <summary>Everything but the game's own code inside hooked methods.</summary>
+    /// <summary>Everything but the game's code inside hooked methods.</summary>
     Mods,
 
-    /// <summary>Only the game's own code inside hooked methods.</summary>
+    /// <summary>Only the game's code inside hooked methods.</summary>
     Game,
 }
 

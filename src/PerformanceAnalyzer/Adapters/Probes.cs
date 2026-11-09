@@ -111,7 +111,7 @@ internal static class MethodProbe
 
 /// <summary>
 /// Brackets a hooked method: the first prefix to run and the last finalizer, so everything Harmony runs for it is
-/// inside. For a game method, also times the call into the game's own code inside the wrapper.
+/// inside. For a game method, also times the call into the game's code inside the wrapper.
 /// </summary>
 internal static class HookProbe
 {

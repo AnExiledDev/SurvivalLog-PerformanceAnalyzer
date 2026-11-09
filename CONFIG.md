@@ -24,7 +24,7 @@ Settings live in `BepInEx\config\com.dev.survivallog.perfanalyzer.cfg`, created 
 | --- | --- | --- |
 | `Patches` | `true` | Time other mods' Harmony prefixes, postfixes and finalizers, and the hooked methods they sit on. |
 | `Tickers` | `true` | Time other mods' Update, LateUpdate, FixedUpdate and OnGUI methods. |
-| `GameTime` | `true` | Inside a hooked game method, time the game's own code apart from the patches. |
+| `GameTime` | `true` | Inside a hooked game method, time the game's code apart from the patches. |
 | `Exclude` | empty | Mods to leave untimed, by plugin id or short key, separated by commas. |
 
 ## Web

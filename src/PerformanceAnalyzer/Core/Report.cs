@@ -407,7 +407,7 @@ public static class Report
             return;
         }
 
-        Line(text, "The parts add up to the frame. gc mods: collections by the mods' .NET runtime in that frame; gc game: collections by the game's own runtime.");
+        Line(text, "The parts add up to the frame. gc mods: collections by the mods' .NET runtime in that frame; gc game: collections by the game's runtime.");
 
         foreach (var hitch in Analysis.WorstHitches(recorder, HitchLines))
         {
