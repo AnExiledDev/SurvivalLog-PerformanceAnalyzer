@@ -1,6 +1,6 @@
 using System;
 using System.Diagnostics;
-using System.Threading;
+using ExiledToolkit.Game;
 using GameCore.HotUpdate.ReduxUI;
 using HarmonyLib;
 using PerformanceAnalyzer.Core;
@@ -15,14 +15,13 @@ namespace PerformanceAnalyzer.Adapters;
 internal static class SlowMessages
 {
     private static Recorder? _recorder;
-    private static Action<string> _log = _ => { };
     private static int _mainThread;
-    private static int _hasReportedFailure;
+    private static PatchKit? _hooks;
 
-    public static void Apply(Harmony harmony, Recorder recorder, Action<string> log)
+    public static void Apply(Harmony harmony, PatchKit hooks, Recorder recorder, Action<string> log)
     {
         _recorder = recorder;
-        _log = log;
+        _hooks = hooks;
         _mainThread = Environment.CurrentManagedThreadId;
 
         try
@@ -61,7 +60,7 @@ internal static class SlowMessages
         }
         catch (Exception ex)
         {
-            if (Interlocked.Exchange(ref _hasReportedFailure, 1) == 0) _log("timing a web message failed (reported once): " + ex.Message);
+            _hooks?.Fail("timing a web message", ex);
         }
 
         return __exception;

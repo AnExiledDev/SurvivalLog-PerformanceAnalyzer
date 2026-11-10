@@ -2,6 +2,9 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using ExiledToolkit.Game;
+using ExiledToolkit.Kit;
+using ExiledToolkit.Web;
 using PerformanceAnalyzer.Core;
 using UnityEngine;
 
@@ -39,6 +42,7 @@ internal sealed class AnalyzerSession
     private readonly WebPage _page;
     private readonly ScriptTraffic _traffic;
     private readonly WebKeyboard _keyboard = new();
+    private readonly PageMailbox _inbox = PageInbox.Listen(PageCommand.Prefix);
     private readonly BrowserMetrics? _browser;
     private readonly BrowserTrace? _trace;
     private readonly HopProbe _hop;
@@ -77,6 +81,12 @@ internal sealed class AnalyzerSession
     }
 
     private static readonly Func<KeyCode, bool> IsKeyDown = Input.GetKeyDown;
+
+    /// <summary>Cached, so a key check allocates nothing.</summary>
+    private static readonly Func<bool> IsTyping = () => ExiledToolkit.Typing.IsActive;
+
+    /// <summary>The name the panel holds the game's keys and clicks under while it is open.</summary>
+    private const string PanelName = "PerformanceAnalyzer.panel";
 
     public SessionSettings Settings { get; set; } = new(KeyCode.Insert, KeyCode.End, 0, true, new ProbeOptions(true, true, true, Array.Empty<string>()), true, true, true);
 
@@ -135,10 +145,10 @@ internal sealed class AnalyzerSession
         _page.KeepInstalled(time, WebPage.ProbeState(_recorder.IsRecording));
 
         // A key typed into a text box, the panel's filter or another mod's search, is text, not a toggle.
-        if (KeyGate.Fires(Settings.Key, KeyCode.None, IsKeyDown, OptionalLive.IsTyping)) Toggle();
-        if (KeyGate.Fires(Settings.TraceKey, KeyCode.None, IsKeyDown, OptionalLive.IsTyping)) StartTrace();
+        if (KeyGate.Fires(Settings.Key, KeyCode.None, IsKeyDown, IsTyping)) Toggle();
+        if (KeyGate.Fires(Settings.TraceKey, KeyCode.None, IsKeyDown, IsTyping)) StartTrace();
 
-        while (PageMessages.TryTake(out var command)) Handle(command);
+        while (_inbox.TryTake(out var message, out var arrivedAt)) Handle(Stamped(PageCommand.Parse(message), arrivedAt));
 
         _hop.Tick(time);
 
@@ -185,7 +195,7 @@ internal sealed class AnalyzerSession
         if (!_page.Open(State())) return;
 
         _isOpen = true;
-        InputGate.PanelOpened();
+        InputGate.Opened(PanelName);
         Push();
     }
 
@@ -216,7 +226,7 @@ internal sealed class AnalyzerSession
         _isOpen = false;
         _page.Close();
         _keyboard.Release();
-        InputGate.PanelClosed();
+        InputGate.Closed(PanelName);
     }
 
     private string State() =>
@@ -227,6 +237,9 @@ internal sealed class AnalyzerSession
 
     /// <summary>With the panel closed only the overlay draws, and the Report tab's snapshot is the lightest one.</summary>
     private void Push() => _page.Update(Snapshot.Json(_recorder, new SnapshotInput(Stopwatch.GetTimestamp(), _isOpen ? _tab : PanelTab.Report, Overlay, _instrumenter.Status, _traffic.Rows(), _frames.HasEngineTimings, _version)));
+
+    /// <summary>A pong gets the time it reached the game, not the next frame's, since the mailbox waits for the next frame.</summary>
+    private static PageCommand Stamped(PageCommand command, long arrivedAt) => command is PageCommand.Pong pong ? pong with { At = arrivedAt } : command;
 
     private void Handle(PageCommand command)
     {

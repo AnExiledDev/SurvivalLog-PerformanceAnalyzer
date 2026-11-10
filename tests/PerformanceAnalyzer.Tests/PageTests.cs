@@ -8,9 +8,14 @@ namespace PerformanceAnalyzer.Tests;
 /// <summary>The page side, run in Jint over the shipped files: the script tag and the panel's number formatting.</summary>
 public class PageTests
 {
-    internal static string Web(string name)
+    internal static string Web(string name) => Resource("PerformanceAnalyzer.web." + name);
+
+    /// <summary>Exiled's Toolkit's page API, as the Toolkit ships it.</summary>
+    internal static string ToolkitApi() => Resource("ExiledToolkit.api.js");
+
+    private static string Resource(string name)
     {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("PerformanceAnalyzer.web." + name) ?? throw new InvalidOperationException(name);
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name) ?? throw new InvalidOperationException(name);
         using var reader = new StreamReader(stream);
 
         return reader.ReadToEnd();

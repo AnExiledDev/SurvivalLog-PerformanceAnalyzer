@@ -7,7 +7,10 @@
   const PREFIX = 'slmod|perfanalyzer|';
   const F = window.__slperfanalyzerFormat;
   const TABS = [['overview', 'Overview'], ['game', 'Game'], ['mods', 'Mods'], ['methods', 'Methods'], ['hitches', 'Hitches'], ['web', 'Web UI'], ['report', 'Report']];
-  const send = (m) => { try { if (window.vuplex) window.vuplex.postMessage(PREFIX + m); } catch (e) { /* the bridge is gone; the plugin sends the panel again */ } };
+  // Runs fn with Exiled's Toolkit's page API: at once once its script has loaded, else when it loads, in order.
+  const withToolkit = (fn) => { (window.ExiledToolkitReady = window.ExiledToolkitReady || []).push(fn); };
+  // A message sent before the Toolkit's script has loaded goes when it loads.
+  const send = (m) => withToolkit((toolkit) => { toolkit.send(PREFIX, m); });
   const esc = F.esc;
 
   const host = document.createElement('div');
@@ -470,21 +473,10 @@
     uiSize(host, { fit: false });
   }
 
-  // Hands a panel to Exiled's Toolkit to be drawn at the player's UI size. Before the Toolkit's script has loaded it
-  // waits in a list the Toolkit reads; without the Toolkit nothing happens.
+  // Hands a panel to Exiled's Toolkit to be drawn at the player's UI size, or this mod's own UiScale.
   function uiSize(node, options) {
     options = Object.assign({ mod: 'PerformanceAnalyzer' }, options);
-    const toolkit = window.ExiledUi;
-
-    if (toolkit) {
-      toolkit.size(node, options);
-      return;
-    }
-
-    const waiting = window.__exiledUiWait = window.__exiledUiWait || [];
-
-    waiting.push([node, options]);
-    if (waiting.length > 32) waiting.shift();
+    withToolkit((toolkit) => { toolkit.size(node, options); });
   }
 
   // ---------- the plugin's calls ----------

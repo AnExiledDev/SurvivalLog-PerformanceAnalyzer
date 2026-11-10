@@ -5,6 +5,9 @@ using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Unity.IL2CPP;
+using ExiledToolkit;
+using ExiledToolkit.Game;
+using ExiledToolkit.Kit;
 using HarmonyLib;
 using PerformanceAnalyzer.Adapters;
 using PerformanceAnalyzer.Core;
@@ -13,17 +16,22 @@ using UnityEngine;
 namespace PerformanceAnalyzer;
 
 [BepInPlugin(Guid, "Performance Analyzer", Version)]
-[BepInDependency(OptionalLive.ToolkitGuid, BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency(ToolkitGuid, ToolkitVersion)]
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.7.4";
+    private const string Version = "0.7.5";
+
+    /// <summary>Exiled's Toolkit: the page messages, live settings, UI size, typing check, hooks and log all come from it.</summary>
+    private const string ToolkitGuid = "com.dev.survivallog.exiledtoolkit";
+    private const string ToolkitVersion = ">=0.19.0";
+
+    /// <summary>The name the panel script hands its panels to the Toolkit with, for Interface &gt; UiScale.</summary>
+    private const string UiSizeName = "PerformanceAnalyzer";
 
     public override void Load()
     {
-        if (!OptionalLive.IsToolkitInstalled) Log.LogInfo(OptionalLive.MissingNote);
-
-        OptionalUiSize.Bind(Config);
+        ModUiSize.Bind(Config, UiSizeName, "Performance Analyzer");
 
         var panelKey = Config.Bind("Controls", "PanelKey", KeyCode.Insert,
             "Key that opens and closes the Performance Analyzer panel, Insert by default. None turns the key off.\n" +
@@ -74,8 +82,9 @@ public sealed class Plugin : BasePlugin
             "Show a small readout of frame time and the slowest mod in the top-right corner, even with the panel closed.\n" +
             "即使面板关闭，也在右上角显示帧耗时与最慢模组的小型读数。");
 
-        var log = new AnalyzerLog(Log, Path.Combine(Paths.BepInExRootPath, "performance-analyzer.log"));
+        var log = new ModLog(Log, "performance-analyzer.log");
         var harmony = new Harmony(Guid);
+        var hooks = new PatchKit(harmony, log.Write);
         var recorder = new Recorder(Stopwatch.Frequency / 1000.0, Math.Max(16, windowFrames.Value), hitchMs.Value);
         var plugins = new PluginIndex(recorder);
         var traffic = new ScriptTraffic();
@@ -88,18 +97,16 @@ public sealed class Plugin : BasePlugin
         log.Write($"===== Performance Analyzer {Version} started");
         Probes.Attach(recorder);
         Markers.Attach(Probes.Begin, Probes.End);
-        InputGate.Apply(harmony, log.Write);
-        PageMessages.Apply(harmony, log.Write);
-        ScriptCounter.Apply(harmony, traffic, log.Write);
-        SlowMessages.Apply(harmony, recorder, log.Write);
+        ScriptCounter.Apply(hooks, traffic);
+        SlowMessages.Apply(harmony, hooks, recorder, log.Write);
 
         if (remoteDebugging.Value)
         {
             WebPage.EnableRemoteDebugging(remotePort.Value, log.Write);
-            DebugPortHook.Apply(harmony, remotePort.Value, log.Write);
+            DebugPortHook.Apply(hooks, remotePort.Value, log.Write);
         }
 
-        OptionalLive.Watch(() => session.Settings = new SessionSettings(
+        LiveSettings.Watch(() => session.Settings = new SessionSettings(
             panelKey.Value,
             traceKey.Value,
             autoStart.Value,
@@ -108,9 +115,9 @@ public sealed class Plugin : BasePlugin
             webProbe.Value,
             scriptTraffic.Value,
             tagScripts.Value), panelKey, traceKey, autoStart, saveOnQuit, patches, tickers, gameTime, exclude, webProbe, scriptTraffic, tagScripts);
-        OptionalLive.Watch(hitchMs, ms => recorder.HitchMs = Math.Max(1, ms));
-        OptionalLive.Watch(windowFrames, frames => recorder.SetWindow(Math.Max(16, frames)));
-        OptionalLive.Watch(overlay, isOn => session.Overlay = isOn);
+        LiveSettings.Watch(hitchMs, ms => recorder.HitchMs = Math.Max(1, ms));
+        LiveSettings.Watch(windowFrames, frames => recorder.SetWindow(Math.Max(16, frames)));
+        LiveSettings.Watch(overlay, isOn => session.Overlay = isOn);
 
         AnalyzerTicker.Session = session;
         AnalyzerTicker.Log = log.Write;

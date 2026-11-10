@@ -52,27 +52,32 @@ public class PanelUiSizeTests
         function host() { return document.body.children[0]; }
         """;
 
-    // Stands in for Exiled's Toolkit's window.ExiledUi and keeps what each call handed it.
+    // Stands in for Exiled's Toolkit's ui.js (window.ExiledUi) and keeps what each call handed it.
     private const string FakeUi = "var handed = []; window.ExiledUi = { size: function (el, options) { handed.push({ el: el, options: options }); } }";
 
-    private static Engine Page(bool hasToolkit)
+    /// <summary>The page with the Toolkit's real api.js, run before or after panel.js: the game can run them in either order.</summary>
+    private static Engine Page(bool isApiFirst, bool hasUi = true)
     {
         var js = new Engine();
 
         js.Execute(FakePage);
-        if (hasToolkit) js.Execute(FakeUi);
+        if (hasUi) js.Execute(FakeUi);
+        if (isApiFirst) js.Execute(PageTests.ToolkitApi());
         js.Execute(PageTests.Web("format.js"));
         js.Execute(PageTests.Web("panel.js"));
+        if (!isApiFirst) js.Execute(PageTests.ToolkitApi());
 
         return js;
     }
 
     private static bool Is(Engine js, string expression) => js.Evaluate($"!!({expression})").AsBoolean();
 
-    [Fact]
-    public void The_host_is_handed_to_the_toolkit_once_and_never_shrunk()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_host_is_handed_to_the_toolkit_once_and_never_shrunk(bool isApiFirst)
     {
-        var js = Page(hasToolkit: true);
+        var js = Page(isApiFirst);
 
         js.Execute("window.__slperfanalyzer.open({ key: 'F10' }); window.__slperfanalyzer.close(); window.__slperfanalyzer.update({})");
 
@@ -84,10 +89,12 @@ public class PanelUiSizeTests
         Assert.True(Is(js, "handed[0].options.fit === false"));
     }
 
-    [Fact]
-    public void A_host_the_page_lost_is_handed_again_when_it_goes_back_in()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void A_host_the_page_lost_is_handed_again_when_it_goes_back_in(bool isApiFirst)
     {
-        var js = Page(hasToolkit: true);
+        var js = Page(isApiFirst);
         js.Execute("var lost = host(); document.body.removeChild(lost)");
 
         js.Execute("window.__slperfanalyzer.open({}); window.__slperfanalyzer.close()");
@@ -98,13 +105,33 @@ public class PanelUiSizeTests
         Assert.True(Is(js, "handed[1].options.fit === false && handed[2].options.fit === false"));
     }
 
-    [Fact]
-    public void Before_the_toolkit_has_loaded_the_host_waits_in_the_list_it_reads()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Before_the_toolkit_s_ui_script_has_loaded_the_host_waits_in_the_list_it_reads(bool isApiFirst)
     {
-        var js = Page(hasToolkit: false);
+        var js = Page(isApiFirst, hasUi: false);
 
         Assert.Equal(1, js.Evaluate("window.__exiledUiWait.length").AsNumber());
         Assert.True(Is(js, "window.__exiledUiWait[0][0] === host()"));
-        Assert.True(Is(js, "window.__exiledUiWait[0][1].fit === false"));
+        Assert.True(Is(js, "window.__exiledUiWait[0][1].fit === false && window.__exiledUiWait[0][1].mod === 'PerformanceAnalyzer'"));
+    }
+
+    [Fact]
+    public void Before_api_js_has_loaded_nothing_is_handed_and_nothing_is_lost()
+    {
+        var js = new Engine();
+
+        js.Execute(FakePage);
+        js.Execute(FakeUi);
+        js.Execute(PageTests.Web("format.js"));
+        js.Execute(PageTests.Web("panel.js"));
+
+        Assert.Equal(0, js.Evaluate("handed.length").AsNumber());
+
+        js.Execute(PageTests.ToolkitApi());
+
+        Assert.Equal(1, js.Evaluate("handed.length").AsNumber());
+        Assert.True(Is(js, "handed[0].el === host()"));
     }
 }

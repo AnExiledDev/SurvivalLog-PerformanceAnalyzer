@@ -1,5 +1,5 @@
 using System;
-using HarmonyLib;
+using ExiledToolkit.Game;
 using PerformanceAnalyzer.Core;
 using Vuplex.WebView;
 
@@ -13,25 +13,17 @@ namespace PerformanceAnalyzer.Adapters;
 internal static class DebugPortHook
 {
     private static int _port;
+    private static PatchKit? _hooks;
     private static Action<string> _log = _ => { };
     private static bool _hasLogged;
 
-    public static void Apply(Harmony harmony, int port, Action<string> log)
+    public static void Apply(PatchKit hooks, int port, Action<string> log)
     {
         _port = port;
+        _hooks = hooks;
         _log = log;
-
-        try
-        {
-            harmony.Patch(
-                AccessTools.Method(typeof(StandaloneWebView), nameof(StandaloneWebView.SetCommandLineArguments), new[] { typeof(string) }),
-                prefix: new HarmonyMethod(typeof(DebugPortHook), nameof(AddPort)));
-            log("the browser's launch arguments keep the remote debugging port");
-        }
-        catch (Exception ex)
-        {
-            log("could not hook the browser's launch arguments, remote debugging may not start: " + ex.Message);
-        }
+        hooks.Patch(typeof(DebugPortHook), typeof(StandaloneWebView), nameof(StandaloneWebView.SetCommandLineArguments), new[] { typeof(string) },
+            prefix: nameof(AddPort), done: "the browser's launch arguments keep the remote debugging port", consequence: "remote debugging may not start");
     }
 
     private static void AddPort(ref string __0)
@@ -46,9 +38,7 @@ internal static class DebugPortHook
         }
         catch (Exception ex)
         {
-            if (!_hasLogged) _log("could not add the remote debugging port to the launch arguments: " + ex.Message);
-
-            _hasLogged = true;
+            _hooks?.Fail("adding the remote debugging port to the launch arguments", ex);
         }
     }
 }

@@ -45,12 +45,31 @@ public class PanelTypingTests
     {
         _js.Execute(PanelUiSizeTests.FakePage);
         _js.Execute(FocusPage);
+        _js.Execute(PageTests.ToolkitApi());
         _js.Execute(PageTests.Web("format.js"));
         _js.Execute(PageTests.Web("panel.js"));
         _js.Execute("window.__slperfanalyzer.open({ tab: 'methods' }); posted = [];");
     }
 
     private string Focuses() => _js.Evaluate("focuses()").AsString();
+
+    [Fact]
+    public void A_focus_change_before_the_toolkit_s_script_has_loaded_reaches_the_game_once_it_loads()
+    {
+        var js = new Engine();
+
+        js.Execute(PanelUiSizeTests.FakePage);
+        js.Execute(FocusPage);
+        js.Execute(PageTests.Web("format.js"));
+        js.Execute(PageTests.Web("panel.js"));
+        js.Execute("window.__slperfanalyzer.open({ tab: 'methods' }); focusFilter();");
+
+        Assert.Equal("", js.Evaluate("focuses()").AsString());
+
+        js.Execute(PageTests.ToolkitApi());
+
+        Assert.Equal(Focus + "1", js.Evaluate("focuses()").AsString());
+    }
 
     [Fact]
     public void Clicking_into_the_filter_asks_the_game_for_the_keyboard_and_clicking_out_gives_it_back()

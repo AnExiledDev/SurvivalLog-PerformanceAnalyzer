@@ -1,6 +1,5 @@
 using System;
-using System.Threading;
-using HarmonyLib;
+using ExiledToolkit.Game;
 using PerformanceAnalyzer.Core;
 using Vuplex.WebView.Internal;
 
@@ -16,8 +15,7 @@ namespace PerformanceAnalyzer.Adapters;
 internal static class ScriptCounter
 {
     private static ScriptTraffic? _traffic;
-    private static Action<string> _log = _ => { };
-    private static int _hasReportedFailure;
+    private static PatchKit? _hooks;
 
     private const string Self = "perfanalyzer";
 
@@ -27,20 +25,12 @@ internal static class ScriptCounter
     /// <summary>[Web] Probe and TagScripts on, recording or not.</summary>
     public static volatile bool IsTagging;
 
-    public static void Apply(Harmony harmony, ScriptTraffic traffic, Action<string> log)
+    public static void Apply(PatchKit hooks, ScriptTraffic traffic)
     {
         _traffic = traffic;
-        _log = log;
-
-        try
-        {
-            harmony.Patch(AccessTools.Method(typeof(BaseWebView), nameof(BaseWebView.ExecuteJavaScript), new[] { typeof(string), typeof(Il2CppSystem.Action<string>) }), prefix: new HarmonyMethod(typeof(ScriptCounter), nameof(Count)));
-            log("counting scripts sent to the web UI");
-        }
-        catch (Exception ex)
-        {
-            log("could not hook the web UI's script runner, the Web UI tab will show no senders: " + ex.Message);
-        }
+        _hooks = hooks;
+        hooks.Patch(typeof(ScriptCounter), typeof(BaseWebView), nameof(BaseWebView.ExecuteJavaScript), new[] { typeof(string), typeof(Il2CppSystem.Action<string>) },
+            prefix: nameof(Count), done: "counting scripts sent to the web UI", consequence: "the Web UI tab will show no senders");
     }
 
     /// <summary>Never throws into the web view: on any failure the script goes through as it was.</summary>
@@ -58,7 +48,7 @@ internal static class ScriptCounter
         }
         catch (Exception ex)
         {
-            if (Interlocked.Exchange(ref _hasReportedFailure, 1) == 0) _log("counting a web UI script failed, it was sent unchanged (reported once): " + ex);
+            _hooks?.Fail("counting a web UI script, it was sent unchanged", ex);
         }
     }
 }

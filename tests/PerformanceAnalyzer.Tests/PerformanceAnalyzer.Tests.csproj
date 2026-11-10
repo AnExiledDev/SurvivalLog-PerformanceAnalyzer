@@ -6,17 +6,22 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ToolkitDll Condition="'$(ToolkitDll)' == ''">D:\devnew\game-mods\SurvivalLog\mods\sl-exiled-toolkit\src\ExiledToolkit\bin\Release\ExiledToolkit.dll</ToolkitDll>
+    <!-- Exiled's Toolkit's source folder, the one its built DLL sits two folders under (bin\Release). -->
+    <ToolkitSrc>$([System.IO.Path]::GetDirectoryName($([System.IO.Path]::GetDirectoryName($([System.IO.Path]::GetDirectoryName('$(ToolkitDll)'))))))</ToolkitSrc>
   </PropertyGroup>
 
-  <!-- The pure core is compiled straight in, so the tests need none of the game or BepInEx assemblies. -->
+  <!-- The pure core is compiled straight in, with the Toolkit's plain helper it uses, so the tests need none of the game or BepInEx assemblies. -->
   <ItemGroup>
     <Compile Include="..\..\src\PerformanceAnalyzer\Core\*.cs" Link="Core\%(Filename)%(Extension)" />
     <Compile Include="..\..\markers\PerfMarkers.cs" Link="markers\PerfMarkers.cs" />
+    <Compile Include="$(ToolkitSrc)\Core\JsText.cs" Link="Toolkit\JsText.cs" />
   </ItemGroup>
 
-  <!-- The page scripts as the plugin ships them, run in Jint. -->
+  <!-- The page scripts as the plugin ships them, run in Jint with the Toolkit's page API. -->
   <ItemGroup>
     <EmbeddedResource Include="..\..\src\PerformanceAnalyzer\web\*" LogicalName="PerformanceAnalyzer.web.%(Filename)%(Extension)" Link="web\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(ToolkitSrc)\api.js" LogicalName="ExiledToolkit.api.js" Link="Toolkit\api.js" />
   </ItemGroup>
 
   <ItemGroup>

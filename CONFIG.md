@@ -49,4 +49,4 @@ With `RemoteDebugging` on, open `chrome://inspect` in Chrome on the same PC, add
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `UiScale` | `0` | How big Performance Analyzer's own windows, panels and messages are drawn, in percent, from 75 to 200. At `0` they follow the UI size set in Exiled's Toolkit (its `UiScale`). Needs Exiled's Toolkit 0.11.0 or newer. |
+| `UiScale` | `0` | How big Performance Analyzer's own windows, panels and messages are drawn, in percent, from 75 to 200. At `0` they follow the UI size set in Exiled's Toolkit (its `UiScale`). |

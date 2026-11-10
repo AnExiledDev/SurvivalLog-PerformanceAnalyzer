@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using ExiledToolkit.Game;
+using ExiledToolkit.Web;
 using GameCore.HotUpdate.ReduxUI;
 using PerformanceAnalyzer.Core;
 using Vuplex.WebView;
@@ -124,22 +126,17 @@ internal sealed class WebPage
 
     private bool Run(string javaScript)
     {
-        var webView = WebView();
-
-        if (webView == null) return false;
-
         try
         {
             IsSending = true;
-            webView.ExecuteJavaScript(javaScript, null);
 
-            return true;
-        }
-        catch (Exception ex)
-        {
-            if (!_hasReportedRunFailure) _log("could not run script in the web UI (reported once): " + ex.Message);
+            if (WebUi.TryRun(javaScript, out var failure)) return true;
 
-            _hasReportedRunFailure = true;
+            if (failure != null && !_hasReportedRunFailure)
+            {
+                _log("could not run script in the web UI (reported once): " + failure.Message);
+                _hasReportedRunFailure = true;
+            }
 
             return false;
         }

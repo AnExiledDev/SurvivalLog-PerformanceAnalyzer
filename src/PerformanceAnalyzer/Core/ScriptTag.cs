@@ -1,3 +1,5 @@
+using ExiledToolkit.Web;
+
 namespace PerformanceAnalyzer.Core;
 
 /// <summary>
