@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using ExiledToolkit.Game;
 using GameCore.HotUpdate.ReduxUI;
-using HarmonyLib;
 using PerformanceAnalyzer.Core;
 
 namespace PerformanceAnalyzer.Adapters;
@@ -18,25 +17,20 @@ internal static class SlowMessages
     private static int _mainThread;
     private static PatchKit? _hooks;
 
-    public static void Apply(Harmony harmony, PatchKit hooks, Recorder recorder, Action<string> log)
+    public static void Apply(PatchKit hooks, Recorder recorder)
     {
+        const string Consequence = "slow web messages will not be listed";
+
         _recorder = recorder;
         _hooks = hooks;
         _mainThread = Environment.CurrentManagedThreadId;
 
-        try
+        // Outermost on both ends, so other mods' patches on the handler are inside the time. Each call takes one
+        // priority, so the two ends go in one at a time, and the finalizer only once the prefix is in.
+        if (hooks.Patch(typeof(SlowMessages), typeof(WebUILayer), "OnMessageFromJS", null, int.MaxValue, prefix: nameof(Before), consequence: Consequence))
         {
-            var target = AccessTools.Method(typeof(WebUILayer), "OnMessageFromJS");
-
-            // Outermost on both ends, so other mods' patches on the handler are inside the time.
-            harmony.Patch(target,
-                prefix: new HarmonyMethod(typeof(SlowMessages), nameof(Before)) { priority = int.MaxValue },
-                finalizer: new HarmonyMethod(typeof(SlowMessages), nameof(After)) { priority = int.MinValue });
-            log("timing the game's web message handler");
-        }
-        catch (Exception ex)
-        {
-            log("could not hook the game's web message handler, slow web messages will not be listed: " + ex.Message);
+            hooks.Patch(typeof(SlowMessages), typeof(WebUILayer), "OnMessageFromJS", null, int.MinValue, finalizer: nameof(After),
+                done: "timing the game's web message handler", consequence: Consequence);
         }
     }
 

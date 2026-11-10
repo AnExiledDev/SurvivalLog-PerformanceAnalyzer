@@ -20,11 +20,11 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.7.5";
+    private const string Version = "0.7.6";
 
     /// <summary>Exiled's Toolkit: the page messages, live settings, UI size, typing check, hooks and log all come from it.</summary>
     private const string ToolkitGuid = "com.dev.survivallog.exiledtoolkit";
-    private const string ToolkitVersion = ">=0.19.0";
+    private const string ToolkitVersion = ">=0.20.0";
 
     /// <summary>The name the panel script hands its panels to the Toolkit with, for Interface &gt; UiScale.</summary>
     private const string UiSizeName = "PerformanceAnalyzer";
@@ -98,7 +98,7 @@ public sealed class Plugin : BasePlugin
         Probes.Attach(recorder);
         Markers.Attach(Probes.Begin, Probes.End);
         ScriptCounter.Apply(hooks, traffic);
-        SlowMessages.Apply(harmony, hooks, recorder, log.Write);
+        SlowMessages.Apply(hooks, recorder);
 
         if (remoteDebugging.Value)
         {

@@ -68,6 +68,6 @@ Each marker shows as its own row, kind `marker`, in the Methods tab, the report 
 ## Requirements
 
 - BepInEx 6 (IL2CPP).
-- [Exiled's Toolkit](https://github.com/AnExiledDev/SurvivalLog-ExiledToolkit) 0.19.0 or newer. Performance Analyzer does not load without it. It keeps the panel key and the trace key quiet while you type, passes the panel's button presses to the mod, applies settings changed on the Mod Manager's Mods screen without a restart, and its UI size setting sizes the panel, the corner overlay and the notices. Performance Analyzer's own `UiScale` under Interface sets a size for this mod alone; at 0, the default, it follows the Toolkit's.
+- [Exiled's Toolkit](https://github.com/AnExiledDev/SurvivalLog-ExiledToolkit) 0.20.0 or newer. Performance Analyzer does not load without it. It keeps the panel key and the trace key quiet while you type, passes the panel's button presses to the mod, applies settings changed on the Mod Manager's Mods screen without a restart, and its UI size setting sizes the panel, the corner overlay and the notices. Performance Analyzer's own `UiScale` under Interface sets a size for this mod alone; at 0, the default, it follows the Toolkit's.
 
 Settings are in [CONFIG.md](CONFIG.md).
