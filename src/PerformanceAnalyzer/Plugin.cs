@@ -20,7 +20,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.7.6";
+    private const string Version = "0.7.7";
 
     /// <summary>Exiled's Toolkit: the page messages, live settings, UI size, typing check, hooks and log all come from it.</summary>
     private const string ToolkitGuid = "com.dev.survivallog.exiledtoolkit";
@@ -72,12 +72,14 @@ public sealed class Plugin : BasePlugin
         var tagScripts = Config.Bind("Web", "TagScripts", true,
             "Mark each mod's scripts from the start of the game, so the page can tell which mod made each timer and listener and time each mod's scripts while recording. Turn it off if a menu mod misbehaves.\n" +
             "从游戏开始就为各模组的脚本加上标记，以便页面分辨每个计时器与监听器来自哪个模组，并在记录时统计每个模组脚本的运行时间。如果某个菜单模组出现异常，请关闭此项。");
-        var remoteDebugging = Config.Bind("Web", "RemoteDebugging", true,
+        var remoteDebugging = Config.Bind("Web", "RemoteDebugging", true, new ConfigDescription(
             "Let Chrome's developer tools attach to the game's menus: open chrome://inspect in Chrome and add localhost and the port below. While recording, the analyzer also reads the menus' style, layout and script time each second for the report, and the Trace button records the menus for 10 seconds. Needs a game restart.\n" +
-            "允许 Chrome 开发者工具连接到游戏菜单：在 Chrome 中打开 chrome://inspect，并添加 localhost 与下面的端口。记录时，分析器还会每秒读取菜单的样式、布局与脚本耗时并写入报告；「Trace 10 s」按钮可录制菜单 10 秒。需要重启游戏。");
-        var remotePort = Config.Bind("Web", "RemoteDebuggingPort", 9222,
+            "允许 Chrome 开发者工具连接到游戏菜单：在 Chrome 中打开 chrome://inspect，并添加 localhost 与下面的端口。记录时，分析器还会每秒读取菜单的样式、布局与脚本耗时并写入报告；「Trace 10 s」按钮可录制菜单 10 秒。需要重启游戏。",
+            null, "ModManager.Restart"));
+        var remotePort = Config.Bind("Web", "RemoteDebuggingPort", 9222, new ConfigDescription(
             "Port for Chrome's developer tools when RemoteDebugging is on. Needs a game restart.\n" +
-            "开启 RemoteDebugging 时 Chrome 开发者工具使用的端口。需要重启游戏。");
+            "开启 RemoteDebugging 时 Chrome 开发者工具使用的端口。需要重启游戏。",
+            null, "ModManager.Restart"));
         var overlay = Config.Bind("Overlay", "Show", false,
             "Show a small readout of frame time and the slowest mod in the top-right corner, even with the panel closed.\n" +
             "即使面板关闭，也在右上角显示帧耗时与最慢模组的小型读数。");

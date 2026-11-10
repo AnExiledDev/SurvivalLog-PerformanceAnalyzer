@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.7
+
+- The Mod Manager now shows that `RemoteDebugging` and `RemoteDebuggingPort` need a game restart.
+- Made for Survival Log 1.1.20719.
+
 ## 0.7.6
 
 - Now needs Exiled's Toolkit 0.20.0 or newer.
