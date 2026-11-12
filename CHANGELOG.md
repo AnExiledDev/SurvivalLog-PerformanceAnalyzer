@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.11
+
+- Clearer wording in the settings and the report.
+- Made for Survival Log 1.1.20719.
+
 ## 0.7.10
 
 - Clearer wording in the settings, the panel and the report.

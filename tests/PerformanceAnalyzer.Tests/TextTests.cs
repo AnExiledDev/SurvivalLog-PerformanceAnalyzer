@@ -159,7 +159,7 @@ public class TextTests
     {
         var text = ReportText(Recorded(), "{\"fps\":60,\"seconds\":10,\"owners\":[{\"key\":\"cheatmenu\",\"ms\":12.5,\"calls\":3}]}");
 
-        foreach (var heading in new[] { "Verdict", "Frame time (ms)", "Mods (time in the mod's own code)", "Scripts sent to the web UI", "Web UI (inside the page)", "What was timed" }) Assert.Contains(heading, text);
+        foreach (var heading in new[] { "Verdict", "Frame time (ms)", "Mods (time spent in each mod's code)", "Scripts sent to the web UI", "Web UI (inside the page)", "What was timed" }) Assert.Contains(heading, text);
 
         Assert.Contains("Mod A", text);
         Assert.Contains("ModA.Ticker.Update", text);

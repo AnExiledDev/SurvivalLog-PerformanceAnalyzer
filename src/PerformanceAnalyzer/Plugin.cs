@@ -20,7 +20,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.7.10";
+    private const string Version = "0.7.11";
 
     /// <summary>Exiled's Toolkit: the page messages, live settings, UI size, typing check, hooks and log all come from it.</summary>
     private const string ToolkitGuid = "com.dev.survivallog.exiledtoolkit";
@@ -62,7 +62,7 @@ public sealed class Plugin : BasePlugin
             "统计其他每个模组的 Update、LateUpdate、FixedUpdate 与 OnGUI 方法的耗时。");
         var gameTime = Config.Bind("Probes", "GameTime", true,
             "Inside a hooked game method, time the game's code apart from the mods' patches.\n" +
-            "在被钩住的游戏方法内，把游戏自身代码的耗时与模组补丁分开统计。");
+            "在被钩住的游戏方法内，把游戏代码的耗时与模组补丁分开统计。");
         var exclude = Config.Bind("Probes", "Exclude", "",
             "Mods to leave untimed, by plugin id or short key, separated by commas. Use it when a mod breaks while it is being timed.\n" +
             "不统计的模组，填写插件 ID 或简称，用逗号分隔。如果某个模组在统计耗时时出错，就把它填在这里。");

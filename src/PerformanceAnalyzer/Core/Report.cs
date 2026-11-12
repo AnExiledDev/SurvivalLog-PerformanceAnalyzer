@@ -210,7 +210,7 @@ public static class Report
 
     private static void WriteMods(StringBuilder text, List<ModRow> rows)
     {
-        Heading(text, "Mods (time in the mod's own code)");
+        Heading(text, "Mods (time spent in each mod's code)");
 
         if (rows.Count == 0)
         {
