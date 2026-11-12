@@ -2,7 +2,7 @@
 
 ## 0.7.9
 
-- The report that saves itself while recording is now put together in the background, not only written there, so the game spends much less time on each save.
+- While recording, the report that saves itself every 60 seconds is now built in the background, so saving takes less time away from the game.
 - Made for Survival Log 1.1.20719.
 
 ## 0.7.8
