@@ -20,7 +20,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.7.9";
+    private const string Version = "0.7.10";
 
     /// <summary>Exiled's Toolkit: the page messages, live settings, UI size, typing check, hooks and log all come from it.</summary>
     private const string ToolkitGuid = "com.dev.survivallog.exiledtoolkit";
@@ -37,11 +37,11 @@ public sealed class Plugin : BasePlugin
             "Key that opens and closes the Performance Analyzer panel, Insert by default. None turns the key off.\n" +
             "打开和关闭性能分析器面板的按键，默认 Insert。设为 None 则停用该按键。");
         var traceKey = Config.Bind("Controls", "TraceKey", KeyCode.End,
-            "Key that records the menus for 10 seconds with the browser's own tracing, the same as the Trace 10 s button, without opening the panel. Needs [Web] RemoteDebugging. End by default. None turns the key off.\n" +
-            "无需打开面板即可用浏览器自带的追踪录制菜单 10 秒的按键，与「Trace 10 s」按钮相同。需要开启 [Web] RemoteDebugging。默认 End。设为 None 则停用该按键。");
+            "Key that does the same as the Trace 10 s button without opening the panel: it records the menus for 10 seconds. Needs [Web] RemoteDebugging. End by default. None turns the key off.\n" +
+            "按下即可录制菜单 10 秒，与「Trace 10 s」按钮相同，无需打开面板。需要开启 [Web] RemoteDebugging。默认 End。设为 None 则停用该按键。");
         var autoStart = Config.Bind("Recording", "AutoStartSeconds", 0f,
             "Start recording on its own this many seconds after the game starts, to catch slow loading. 0 waits for the Start button.\n" +
-            "游戏启动多少秒后自动开始记录，用于捕捉加载时的卡顿。0 表示等待点击「开始」。");
+            "游戏启动多少秒后自动开始记录，用于捕捉加载时的卡顿。0 表示等你点击「Start」。");
         var hitchMs = Config.Bind("Recording", "HitchMs", 50f,
             "A frame that takes longer than this many milliseconds is recorded as a hitch, with what ran in it. 50 ms is a stutter most players notice.\n" +
             "耗时超过这么多毫秒的帧会被记为卡顿，并记下其中运行的内容。50 毫秒是大多数玩家能察觉的卡顿。");
@@ -52,8 +52,8 @@ public sealed class Plugin : BasePlugin
             "Save a report to BepInEx/performance-analyzer when the game closes, if anything was recorded.\n" +
             "游戏关闭时，如有记录内容，则把报告保存到 BepInEx/performance-analyzer。");
         var saveEvery = Config.Bind("Recording", "SaveEverySeconds", 60f,
-            "While recording, save the report to BepInEx/performance-analyzer this often, in seconds, and once more when recording stops, so a crash or a hard close still leaves one. 0 turns it off.\n" +
-            "记录时每隔这么多秒把报告保存到 BepInEx/performance-analyzer，停止记录时再保存一次，这样即使游戏崩溃或被强行关闭也能留下报告。0 表示关闭。");
+            "How often, in seconds, to save the report to BepInEx/performance-analyzer while recording. It also saves once more when recording stops, so a crash or a hard close still leaves a report. 0 turns it off.\n" +
+            "记录时每隔多少秒把报告保存到 BepInEx/performance-analyzer。停止记录时还会再保存一次，这样即使游戏崩溃或被强行关闭也能留下报告。0 表示关闭。");
         var patches = Config.Bind("Probes", "Patches", true,
             "Time every other mod's Harmony prefixes, postfixes and finalizers, and the hooked methods they sit on.\n" +
             "统计其他每个模组的 Harmony 前缀、后缀与终结补丁，以及它们所钩住的方法的耗时。");
@@ -64,11 +64,11 @@ public sealed class Plugin : BasePlugin
             "Inside a hooked game method, time the game's code apart from the mods' patches.\n" +
             "在被钩住的游戏方法内，把游戏自身代码的耗时与模组补丁分开统计。");
         var exclude = Config.Bind("Probes", "Exclude", "",
-            "Mods to leave untimed, by plugin id or short key, separated by commas. Use it when a mod breaks while timed.\n" +
-            "不统计的模组，填写插件 ID 或简称，用逗号分隔。某个模组在被统计时出错时使用。");
+            "Mods to leave untimed, by plugin id or short key, separated by commas. Use it when a mod breaks while it is being timed.\n" +
+            "不统计的模组，填写插件 ID 或简称，用逗号分隔。如果某个模组在统计耗时时出错，就把它填在这里。");
         var webProbe = Config.Bind("Web", "Probe", true,
-            "Watch the menus from inside the page while recording: page frame rate, long tasks, memory, page elements and timers per mod, and how long each click takes to show its answer and finish its fades.\n" +
-            "记录时从页面内部监测菜单：页面帧率、长任务、内存，各模组的页面元素与计时器，以及每次点击多久显示结果、多久完成淡入淡出。");
+            "Watch the menus from inside the page while recording: page frame rate, long tasks, memory, page elements and timers per mod, and how long each click takes until the page changes and its fades finish.\n" +
+            "记录时从页面内部监测菜单：页面帧率、长任务、内存，各模组的页面元素与计时器，以及每次点击后多久页面发生变化、多久淡入淡出结束。");
         var scriptTraffic = Config.Bind("Web", "ScriptTraffic", true,
             "Count the scripts each mod sends to the menus while recording, and their size.\n" +
             "记录时统计各模组发送到菜单的脚本数量与大小。");
@@ -76,8 +76,8 @@ public sealed class Plugin : BasePlugin
             "Mark each mod's scripts from the start of the game, so the page can tell which mod made each timer and listener and time each mod's scripts while recording. Turn it off if a menu mod misbehaves.\n" +
             "从游戏开始就为各模组的脚本加上标记，以便页面分辨每个计时器与监听器来自哪个模组，并在记录时统计每个模组脚本的运行时间。如果某个菜单模组出现异常，请关闭此项。");
         var remoteDebugging = Config.Bind("Web", "RemoteDebugging", true, new ConfigDescription(
-            "Let Chrome's developer tools attach to the game's menus: open chrome://inspect in Chrome and add localhost and the port below. While recording, the analyzer also reads the menus' style, layout and script time each second for the report, and the Trace button records the menus for 10 seconds. Needs a game restart.\n" +
-            "允许 Chrome 开发者工具连接到游戏菜单：在 Chrome 中打开 chrome://inspect，并添加 localhost 与下面的端口。记录时，分析器还会每秒读取菜单的样式、布局与脚本耗时并写入报告；「Trace 10 s」按钮可录制菜单 10 秒。需要重启游戏。",
+            "Let Chrome's developer tools attach to the game's menus: open chrome://inspect in Chrome and add localhost and the port set in RemoteDebuggingPort. While recording, the analyzer also reads the menus' style, layout and script time each second for the report, and the Trace 10 s button can record the menus for 10 seconds. Needs a game restart.\n" +
+            "允许 Chrome 开发者工具连接到游戏菜单：在 Chrome 中打开 chrome://inspect，并添加 localhost 与 RemoteDebuggingPort 中设置的端口。记录时，分析器还会每秒读取菜单的样式、布局与脚本耗时并写入报告。「Trace 10 s」按钮可以录制菜单 10 秒。需要重启游戏。",
             null, "ModManager.Restart"));
         var remotePort = Config.Bind("Web", "RemoteDebuggingPort", 9222, new ConfigDescription(
             "Port for Chrome's developer tools when RemoteDebugging is on. Needs a game restart.\n" +

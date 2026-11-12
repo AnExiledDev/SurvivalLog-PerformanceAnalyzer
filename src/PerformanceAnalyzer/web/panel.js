@@ -29,10 +29,10 @@
     '<div class="actions">' +
     '<button data-act="toggle" id="toggle">Start</button>' +
     '<button data-act="reset" title="Clear every number and start counting again">Reset</button>' +
-    '<button data-act="unhook" title="Stop and remove every probe, so the other mods run untouched">Unhook</button>' +
+    '<button data-act="unhook" title="Stop recording and remove every timing hook, so other mods run without them">Unhook</button>' +
     '<button data-act="copy" title="Put the plain-text report on the clipboard">Copy report</button>' +
-    '<button data-act="save" title="Save the report and a per-frame file to BepInEx/performance-analyzer">Save report</button>' +
-    '<button data-act="trace" title="Record the menus with the browser\'s own tracing for 10 seconds and save it to BepInEx/performance-analyzer. The TraceKey (End) does the same with the panel closed">Trace 10 s</button>' +
+    '<button data-act="save" title="Save the report, the frames file and the seconds file to BepInEx/performance-analyzer">Save report</button>' +
+    '<button data-act="trace" title="Record the menus for 10 seconds and save the trace to BepInEx/performance-analyzer. The trace key (End by default) does the same with the panel closed">Trace 10 s</button>' +
     '<button data-act="overlay" id="ovl"title="Show frame time in the top-right corner with the panel closed">Overlay</button>' +
     '<button data-act="close" class="x" title="Close (Esc)">X</button>' +
     '</div></header>' +
@@ -236,7 +236,7 @@
       }).join('');
 
     $('#main').innerHTML =
-      '<p class="dim">The game has no fixed tick: it updates its world once per frame, so logic updates per second follow the frame rate. When one frame runs longer than the engine allows, the game itself slows down; that is the game time lost.</p>' +
+      '<p class="dim">The game has no fixed tick: it updates its world once per frame, so logic updates per second follow the frame rate. When a frame takes longer than the engine allows, the game slows down. That is the game time lost.</p>' +
       '<section class="tiles">' +
       tile('FPS now', g.fpsNow > 0 ? g.fpsNow.toFixed(0) : '-', fpsClass(g.fpsNow), 'Frames in the last whole second') +
       tile('Logic / s', g.seenGame ? g.logicNow.toFixed(0) : '-', '', 'Game world updates in the last whole second', g.seenGame ? `average ${g.logic.toFixed(1)}` : 'no game loaded') +
@@ -307,7 +307,7 @@
 
     $('#main').innerHTML =
       stutterSection(snap.stutters, 'Stutter makers: mods that made frames slow on their own') +
-      '<p class="dim">Time each mod spent in its own code per frame, averaged over every recorded frame. "Hitches caused" counts slow frames where the mod took 40% of the frame or more. Rating: heavy is 1 ms a frame or more, 3 stutters, or one frame as slow as a hitch; watch is 0.25 ms a frame, any stutter, a frame of half a hitch, or 2 ms in its slowest 1% of frames. Deep times every method of one mod, so the Methods tab shows what inside it is slow; it adds overhead to that mod while on.</p>' +
+      '<p class="dim">Time each mod spent in its code per frame, averaged over every recorded frame. "Hitches caused" counts slow frames where the mod took 40% of the frame or more. A mod is heavy at 1 ms a frame or more, 3 stutters, or one frame as slow as a hitch. It is watch at 0.25 ms a frame, 1 stutter, one frame half as slow as a hitch, or 2 ms in its slowest 1% of frames. Deep times every method of one mod, so the Methods tab shows what inside it is slow. That mod runs a little slower while Deep is on.</p>' +
       `<table class="wide">${header('mods', cols)}${body || '<tr><td colspan="11" class="dim">No mod has run any timed code yet.</td></tr>'}</table>` +
       (idle.length ? `<p class="dim">${idle.length} more with no measurable time: ${idle.join(', ')}</p>` : '');
   }
@@ -383,8 +383,8 @@
       (w
         ? `<div class="tiles">${tile('Page FPS', w.fps.toFixed(0), '')}${tile('Longest gap', F.ms(w.worstGapMs) + ' ms', F.frameClass(w.worstGapMs))}${tile('Long tasks', F.count(w.longTasks) + ' / ' + F.ms(w.longTaskMs) + ' ms', '')}${tile('Script heap', w.heapMB.toFixed(1) + ' MB', '')}${tile('Elements', F.count(w.domNodes), '')}</div>` +
           `<table><tr><th>Script owner</th><th class="n">run ms</th><th class="n">runs</th><th class="n">slowest</th><th class="n">elements</th><th class="n">listeners</th><th class="n">timeouts</th><th class="n">intervals</th><th class="n">observers</th><th class="n">messages</th></tr>${owners}</table>` +
-          '<p class="dim">Run time counts scripts the plugin sent, and the timers, listeners and observers they set up, in the main page and in every game page. Owners are kept from the start of the game; time is only counted while recording. Scripts a mod sent before the probe first arrived have no owner.</p>' +
-          (w.longTasks ? `<p>Long task time no timed script explains: <b>${F.ms(w.longTaskUnownedMs)} ms</b> of ${F.ms(w.longTaskMs)} ms. That is the page's own work: style, layout, painting, or the game's scripts.</p>` : '') +
+          '<p class="dim">Run time counts scripts the plugin sent, and the timers, listeners and observers they set up, in the main page and in every game page. Owners are kept from the start of the game, but time is only counted while recording. Scripts a mod sent before the probe first arrived have no owner.</p>' +
+          (w.longTasks ? `<p>Long task time no timed script explains: <b>${F.ms(w.longTaskUnownedMs)} ms</b> of ${F.ms(w.longTaskMs)} ms. That is the page's work: style, layout, painting, or the game's scripts.</p>` : '') +
           (taskPages ? `<table><tr><th>Long tasks on page</th><th class="n">count</th><th class="n">ms</th><th class="n">unexplained ms</th></tr>${taskPages}</table>` : '') +
           (pages ? `<table><tr><th>Page frame</th><th class="n">elements</th><th class="n">listeners</th></tr>${pages}</table><p class="dim">Showing now: ${esc(w.page || 'hud')}. Listeners count those added since the probe arrived.</p>` : '')
         : '<p class="dim">The web probe is not in the page. It is sent at the start of the game and checked every couple of seconds, unless [Web] Probe is off.</p>') +

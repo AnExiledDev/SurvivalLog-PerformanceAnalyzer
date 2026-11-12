@@ -17,7 +17,7 @@ Settings live in `BepInEx\config\com.dev.survivallog.perfanalyzer.cfg`, created 
 | `HitchMs` | `50` | A frame longer than this many milliseconds is kept as a hitch. |
 | `WindowFrames` | `7200` | How many of the latest frames the graph, percentiles and frame file keep. Totals cover the whole recording. |
 | `SaveOnQuit` | `true` | Save a report when the game closes, if anything was recorded. |
-| `SaveEverySeconds` | `60` | While recording, save the report this often, and once more when recording stops, so a crash or a hard close still leaves one. `0` turns it off. |
+| `SaveEverySeconds` | `60` | How often, in seconds, to save the report while recording. It also saves once more when recording stops, so a crash or a hard close still leaves a report. `0` turns it off. |
 
 ## Probes
 
@@ -32,13 +32,13 @@ Settings live in `BepInEx\config\com.dev.survivallog.perfanalyzer.cfg`, created 
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `Probe` | `true` | Watch the menus from inside the page while recording: each mod's script time, and how long each click takes to draw and to finish its fades. |
+| `Probe` | `true` | Watch the menus from inside the page while recording: each mod's script time, and how long each click takes until the page draws again and its fades finish. |
 | `ScriptTraffic` | `true` | Count the scripts each mod sends to the menus, and their size. |
 | `TagScripts` | `true` | Mark each mod's scripts from the start of the game so the page can time them and name what they leave running. Turn it off if a menu mod misbehaves while recording. |
 | `RemoteDebugging` | `true` | Let Chrome's developer tools attach to the menus. While recording, the analyzer also reads the menus' style, layout and script time each second for the report, and the panel gets a Trace 10 s button. Needs a game restart. |
 | `RemoteDebuggingPort` | `9222` | Port for Chrome's developer tools. |
 
-With `RemoteDebugging` on, open `chrome://inspect` in Chrome on the same PC, add `localhost:9222` under Configure, and the game's page shows up to inspect, with Chrome's own Performance profiler. The Trace 10 s button in the panel records the same kind of trace without Chrome and saves it in BepInEx/performance-analyzer.
+With `RemoteDebugging` on, open `chrome://inspect` in Chrome on the same PC, add `localhost:9222` under Configure, and the game's page shows up to inspect, with Chrome's Performance profiler. The Trace 10 s button in the panel records the same kind of trace without Chrome and saves it in BepInEx/performance-analyzer.
 
 ## Overlay
 
@@ -50,4 +50,4 @@ With `RemoteDebugging` on, open `chrome://inspect` in Chrome on the same PC, add
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `UiScale` | `0` | How big Performance Analyzer's own windows, panels and messages are drawn, in percent, from 75 to 200. At `0` they follow the UI size set in Exiled's Toolkit (its `UiScale`). |
+| `UiScale` | `0` | How big Performance Analyzer's panel, corner overlay and notices are drawn, in percent, from 75 to 200. At `0` they follow the UI size set in Exiled's Toolkit (its `UiScale`). |

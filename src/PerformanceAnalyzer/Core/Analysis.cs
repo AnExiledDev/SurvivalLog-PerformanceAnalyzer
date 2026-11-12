@@ -359,7 +359,7 @@ public static class Analysis
         var modShare = split.FrameMs > 0 ? (split.ModsMs + split.HookMs) / split.FrameMs : 0;
         var mods = ModRows(recorder, recordedSeconds).Where(r => r.Id != Recorder.AnalyzerMod).ToList();
 
-        lines.Add($"About {fps:0} frames per second on average; the slowest 1% of frames take {spread.P99:0.0} ms or more.");
+        lines.Add($"About {fps:0} frames per second on average. The slowest 1% of frames take {spread.P99:0.0} ms or more.");
 
         if (modShare >= 0.15) lines.Add($"Mods are a large part of each frame: {Percent(modShare)} of frame time is mod code or the cost of their hooks.");
         else if (modShare >= 0.05) lines.Add($"Mods take a noticeable part of each frame: {Percent(modShare)} of frame time.");
@@ -375,7 +375,7 @@ public static class Analysis
         lines.AddRange(HitchVerdict(recorder));
 
         if (split.HookMs >= 0.5) lines.Add($"Hooking game methods costs {split.HookMs:0.00} ms per frame by itself. The Methods tab sorted by self time shows which hooks run most often.");
-        if (split.AnalyzerMs >= 1) lines.Add($"The analyzer itself adds about {split.AnalyzerMs:0.0} ms per frame. A deep profile adds the most; turn it off when done.");
+        if (split.AnalyzerMs >= 1) lines.Add($"The analyzer itself adds about {split.AnalyzerMs:0.0} ms per frame. A deep profile adds the most, so turn it off when you are done.");
 
         return lines;
     }
@@ -426,7 +426,7 @@ public static class Analysis
 
         lines.Add($"{recorder.HitchCount} frames took {recorder.HitchMs:0} ms or more." + (summary.Length > 0 ? $" Most likely causes: {summary}." : ""));
 
-        if (recorder.HitchCauses.TryGetValue(analyzer, out var own)) lines.Add($"The analyzer itself caused {own} of them; those are not a mod's fault.");
+        if (recorder.HitchCauses.TryGetValue(analyzer, out var own)) lines.Add($"The analyzer itself caused {own} of them, so no mod is to blame for those.");
 
         return lines;
     }

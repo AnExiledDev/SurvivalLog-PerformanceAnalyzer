@@ -146,7 +146,7 @@ internal sealed class AnalyzerSession
         catch (AggregateException ex)
         {
             // The frame that would have logged it never comes.
-            _log("could not save the report on its own: " + ex.GetBaseException().Message);
+            _log("could not save the report while recording: " + ex.GetBaseException().Message);
         }
     }
 
@@ -315,7 +315,7 @@ internal sealed class AnalyzerSession
             case PageCommand.Unhook:
                 Stop();
                 _instrumenter.Deactivate();
-                Notice("Probes removed. Start adds them again.");
+                Notice("Timing hooks removed. Press Start to add them again.");
                 break;
             case PageCommand.CopyReport:
                 Notice(Machine.Copy(ReportText(), _log) ? "Report copied to the clipboard." : "Could not copy. Use Save report instead.");
@@ -465,12 +465,12 @@ internal sealed class AnalyzerSession
         // Write catches its own failures, so a faulted task is a bug in building the report; it is still logged and
         // saving goes on.
         var result = done.IsCompletedSuccessfully ? done.Result : new SaveOutcome("", done.Exception?.GetBaseException().Message ?? "the save did not finish");
-        var outcome = Logged(result, "could not save the report on its own: ", isQuietWhenSaved: true);
+        var outcome = Logged(result, "could not save the report while recording: ", isQuietWhenSaved: true);
 
         if (outcome.IsSaved && !_hasLoggedAutoSave)
         {
             _hasLoggedAutoSave = true;
-            _log("saving the report on its own while recording, to " + outcome.Report);
+            _log("saving the report while recording, to " + outcome.Report);
         }
 
         if (_isSaveOwed) SaveInBackground();

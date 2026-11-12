@@ -148,8 +148,8 @@ public static class Report
 
         Line(text, $"Physics ran {game.FixedPerSecond:0.0} steps a second (set to {(world.FixedDeltaSeconds > 0 ? 1 / world.FixedDeltaSeconds : 0):0}). At the end: game speed {world.GameSpeed:0.##}x, engine time scale {world.TimeScale:0.###}.");
         Line(text, game.CappedFrames > 0
-            ? $"Slow frames cost {game.CappedMs / 1000:0.0} s of game time over {game.CappedFrames} frames ({game.CappedPercent:0.0}%). One frame moves the game at most {world.MaxDeltaSeconds * 1000:0} ms, so a slower frame makes the game itself run slow."
-            : $"No game time was lost to slow frames (one frame moves the game at most {world.MaxDeltaSeconds * 1000:0} ms).");
+            ? $"Slow frames cost {game.CappedMs / 1000:0.0} s of game time over {game.CappedFrames} frames ({game.CappedPercent:0.0}%). One frame moves the game forward by at most {world.MaxDeltaSeconds * 1000:0} ms, so a frame slower than that slows the game down."
+            : $"No game time was lost to slow frames (one frame moves the game forward by at most {world.MaxDeltaSeconds * 1000:0} ms).");
         Line(text);
     }
 
@@ -179,7 +179,7 @@ public static class Report
             Line(text, $"{label,-20} {pick(game.LastMemory) / Analysis.MB,9:0.0} {pick(game.PeakMemory) / Analysis.MB,9:0.0} {game.GrowthPerMinute(pick) / Analysis.MB,9:+0.00;-0.00;0.00}");
         }
 
-        Line(text, $"over {(game.LastMemoryAt - game.FirstMemoryAt) / 60:0.0} minutes; per min is the change from the first reading to the last");
+        Line(text, $"per min: the change from the first reading to the last, over {(game.LastMemoryAt - game.FirstMemoryAt) / 60:0.0} minutes");
         Line(text);
     }
 
@@ -228,8 +228,8 @@ public static class Report
 
         if (idle.Count > 0) Line(text, $"{idle.Count} more with no measurable time: " + string.Join(", ", idle.Select(r => r.Mod.Name)));
 
-        Line(text, "rating: heavy is 1 ms a frame or more, 3 stutters of its own, or one frame as slow as a hitch; watch is 0.25 ms a frame, any stutter, a frame of half a hitch, or p99 of 2 ms; fine is less.");
-        Line(text, "KB/s is memory the mod's own code allocated on the mods' .NET runtime; the game's script heap is not counted here.");
+        Line(text, "rating: heavy means 1 ms a frame or more, 3 stutters, or one frame as slow as a hitch. watch means 0.25 ms a frame, 1 stutter, one frame half as slow as a hitch, or a p99 of 2 ms. fine means less than that.");
+        Line(text, "KB/s is the memory the mod's code allocated on the mods' .NET runtime, and the game's script heap is not counted here.");
         Line(text, "caused: hitches where the mod took 40% of the frame or more on its own. p99 is rounded down, by up to 6%.");
 
         Line(text);
@@ -354,7 +354,7 @@ public static class Report
 
         foreach (var m in messages.OrderByDescending(m => m.Ms).Take(SlowMessageLines)) Line(text, $"{m.Ms,7:0.0} {m.AtSeconds,7:0.0} {Fit(m.Page, 14),-14} {Fit(m.Command, 30),-30}  {m.Head}");
 
-        Line(text, "command: the message's type, page and parameter. Type 3 is a page talking to the game; the page decides what it asks for.");
+        Line(text, "command: the message's type, page and parameter. Type 3 is a page asking the game for something.");
         Line(text);
     }
 
@@ -470,7 +470,7 @@ public static class Report
 
             Line(text, $"page frames/s {Get(root, "fps"):0}, longest gap {Get(root, "worstGapMs"):0} ms, long tasks {Get(root, "longTasks"):0} ({Get(root, "longTaskMs"):0} ms), script heap {Get(root, "heapMB"):0.0} MB, page elements {Get(root, "domNodes"):0}, over the last {Get(root, "seconds"):0} s");
 
-            if (Get(root, "longTasks") > 0) Line(text, $"long task time no timed script explains: {Get(root, "longTaskUnownedMs"):0} ms of {Get(root, "longTaskMs"):0} ms. That is the page's own work: style, layout, painting, or the game's scripts.");
+            if (Get(root, "longTasks") > 0) Line(text, $"long task time no timed script explains: {Get(root, "longTaskUnownedMs"):0} ms of {Get(root, "longTaskMs"):0} ms. That is the page's work: style, layout, painting, or the game's scripts.");
 
             if (root.TryGetProperty("longTaskPages", out var taskPages) && taskPages.ValueKind == JsonValueKind.Array && taskPages.GetArrayLength() > 0)
             {
@@ -526,7 +526,7 @@ public static class Report
     private static void WriteClicks(StringBuilder text, JsonElement clicks)
     {
         Line(text);
-        Line(text, $"clicks and key presses: {Get(clicks, "count"):0}. Times are ms from the press: frame is the next frame drawn, change the first change anywhere in the page (the HUD changes on its own, so a small number here can be the HUD), settled when every fade or animation the press started had ended.");
+        Line(text, $"clicks and key presses: {Get(clicks, "count"):0}. Times are ms from the press. frame: the next frame drawn. change: the first change anywhere in the page (the HUD changes by itself, so a small number here can be the HUD). settled: every fade or animation the press started has ended.");
 
         if (Get(clicks, "count") <= 0)
         {
