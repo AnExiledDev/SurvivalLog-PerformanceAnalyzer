@@ -17,6 +17,7 @@ Settings live in `BepInEx\config\com.dev.survivallog.perfanalyzer.cfg`, created 
 | `HitchMs` | `50` | A frame longer than this many milliseconds is kept as a hitch. |
 | `WindowFrames` | `7200` | How many of the latest frames the graph, percentiles and frame file keep. Totals cover the whole recording. |
 | `SaveOnQuit` | `true` | Save a report when the game closes, if anything was recorded. |
+| `SaveEverySeconds` | `60` | While recording, save the report this often, and once more when recording stops, so a crash or a hard close still leaves one. `0` turns it off. |
 
 ## Probes
 

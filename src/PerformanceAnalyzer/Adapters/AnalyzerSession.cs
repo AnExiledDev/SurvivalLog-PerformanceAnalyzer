@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using ExiledToolkit.Game;
 using ExiledToolkit.Kit;
 using ExiledToolkit.Web;
@@ -16,6 +17,7 @@ internal sealed record SessionSettings(
     KeyCode TraceKey,
     float AutoStartSeconds,
     bool SaveOnQuit,
+    double SaveEverySeconds,
     ProbeOptions Probes,
     bool WebProbe,
     bool ScriptTraffic,
@@ -34,6 +36,9 @@ internal sealed class AnalyzerSession
 
     /// <summary>How long a notice that missed the panel script is still worth showing once the script is in.</summary>
     private const float NoticeSeconds = 4f;
+
+    /// <summary>How long quitting waits for a save still being written before it writes its own.</summary>
+    private const int QuitWaitMs = 3000;
 
     private readonly Recorder _recorder;
     private readonly PluginIndex _plugins;
@@ -61,6 +66,17 @@ internal sealed class AnalyzerSession
     private string _probeNames = "{}";
     private string _notice = "";
     private float _noticeAt;
+    private readonly SaveTimer _saveTimer = new();
+
+    /// <summary>Names the files of the numbers recorded since the first Start or the last Reset; "" before that.</summary>
+    private string _stamp = "";
+
+    /// <summary>The save being written on another thread, if any.</summary>
+    private Task<SaveOutcome>? _writing;
+
+    /// <summary>A save asked for while another was still writing; it runs once that one is done.</summary>
+    private bool _isSaveOwed;
+    private bool _hasLoggedAutoSave;
 
     public AnalyzerSession(Recorder recorder, PluginIndex plugins, Instrumenter instrumenter, FrameSource frames, WebPage page, ScriptTraffic traffic, BrowserMetrics? browser, BrowserTrace? trace, string reportDir, string version, Action<bool> saveOverlay, Action<string> log)
     {
@@ -88,7 +104,7 @@ internal sealed class AnalyzerSession
     /// <summary>The name the panel holds the game's keys and clicks under while it is open.</summary>
     private const string PanelName = "PerformanceAnalyzer.panel";
 
-    public SessionSettings Settings { get; set; } = new(KeyCode.Insert, KeyCode.End, 0, true, new ProbeOptions(true, true, true, Array.Empty<string>()), true, true, true);
+    public SessionSettings Settings { get; set; } = new(KeyCode.Insert, KeyCode.End, 0, true, 60, new ProbeOptions(true, true, true, Array.Empty<string>()), true, true, true);
 
     public bool Overlay { get; set; }
 
@@ -114,7 +130,11 @@ internal sealed class AnalyzerSession
     /// <summary>Saves a report on the way out, so a session that ended in a crash-free quit is not lost.</summary>
     public void Quit()
     {
-        if (Settings.SaveOnQuit && _recorder.FrameCount > 0) Save(false);
+        if (!Settings.SaveOnQuit || _recorder.FrameCount == 0) return;
+
+        // A save still being written would otherwise land after this one with older numbers.
+        _writing?.Wait(QuitWaitMs);
+        Logged(ReportFiles.Write(_reportDir, RecordingStamp(), Collect()), "could not save the report on quit: ");
     }
 
     private void Tick()
@@ -175,6 +195,10 @@ internal sealed class AnalyzerSession
         {
             while (_trace.TryTakeMessage(out var message)) Notice(message);
         }
+
+        TakeFinishedSave();
+
+        if (_saveTimer.Due(time, _recorder.IsRecording, Settings.SaveEverySeconds)) SaveInBackground();
 
         if ((_isOpen || Overlay) && time >= _nextPushAt)
         {
@@ -338,6 +362,8 @@ internal sealed class AnalyzerSession
         _instrumenter.Activate(Settings.Probes, Time.unscaledTime);
         _recorder.Start(Stopwatch.GetTimestamp());
 
+        if (_stamp.Length == 0) _stamp = NewStamp();
+
         if (_browser != null) _browser.IsWanted = true;
         ScriptCounter.IsCounting = Settings.ScriptTraffic;
 
@@ -357,6 +383,9 @@ internal sealed class AnalyzerSession
         ScriptCounter.IsCounting = false;
         _page.ProbeRecording(false, false);
         _log($"recording stopped after {_recorder.FrameCount} frames, {_recorder.HitchCount} hitches");
+
+        // The numbers stop changing here, so this save is the last one this recording needs.
+        if (Settings.SaveEverySeconds > 0 && _recorder.FrameCount > 0) SaveInBackground();
     }
 
     private void Reset()
@@ -365,34 +394,73 @@ internal sealed class AnalyzerSession
         _traffic.Clear();
         _webJson = "";
         _page.ProbeReset();
+        _stamp = _recorder.IsRecording ? NewStamp() : "";
         _log("numbers cleared");
     }
 
     private string ReportText() => Report.Text(_recorder, new ReportInput(Stopwatch.GetTimestamp(), DateTime.Now, _version, Application.version, Machine.Describe(), _instrumenter.Status, _traffic.Rows(), _webJson, _plugins.Loaded, (_trace?.LastText ?? "") + (_hop.LastText.Length > 0 ? "\n" + _hop.LastText : "")));
 
+    /// <summary>The Save button: a new set of files named for now, apart from the recording's own.</summary>
     private void Save(bool tellPanel)
     {
-        try
-        {
-            Directory.CreateDirectory(_reportDir);
+        var stamp = NewStamp();
+        var outcome = Logged(ReportFiles.Write(_reportDir, stamp, Collect()), "could not save the report: ");
 
-            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
-            var text = ReportText();
-            var report = Path.Combine(_reportDir, $"report-{stamp}.txt");
+        if (!tellPanel) return;
 
-            File.WriteAllText(report, text);
-            File.WriteAllText(Path.Combine(_reportDir, "latest-report.txt"), text);
-            File.WriteAllText(Path.Combine(_reportDir, $"frames-{stamp}.csv"), Report.FramesCsv(_recorder));
-            File.WriteAllText(Path.Combine(_reportDir, $"seconds-{stamp}.csv"), Report.SecondsCsv(_recorder));
-            _log("report saved to " + report);
-
-            if (tellPanel) Notice("Saved to BepInEx/performance-analyzer/report-" + stamp + ".txt");
-        }
-        catch (Exception ex)
-        {
-            _log("could not save the report: " + ex.Message);
-
-            if (tellPanel) Notice("Could not save the report: " + ex.Message);
-        }
+        Notice(outcome.IsSaved ? "Saved to BepInEx/performance-analyzer/report-" + stamp + ".txt" : "Could not save the report: " + outcome.Failure);
     }
+
+    /// <summary>
+    /// Saves the recording's own files without holding up the frame on the disk: the report is made here, since the
+    /// recorder changes every frame, and only the writing happens on another thread.
+    /// </summary>
+    private void SaveInBackground()
+    {
+        if (_writing != null)
+        {
+            _isSaveOwed = true;
+
+            return;
+        }
+
+        var stamp = RecordingStamp();
+        var set = Collect();
+
+        _isSaveOwed = false;
+        _writing = Task.Run(() => ReportFiles.Write(_reportDir, stamp, set));
+    }
+
+    private void TakeFinishedSave()
+    {
+        if (_writing is not { IsCompleted: true } done) return;
+
+        _writing = null;
+
+        // Write catches its own failures, so a faulted task is a bug; it is still logged and saving goes on.
+        var result = done.IsCompletedSuccessfully ? done.Result : new SaveOutcome("", done.Exception?.GetBaseException().Message ?? "the save did not finish");
+        var outcome = Logged(result, "could not save the report on its own: ", isQuietWhenSaved: true);
+
+        if (outcome.IsSaved && !_hasLoggedAutoSave)
+        {
+            _hasLoggedAutoSave = true;
+            _log("saving the report on its own while recording, to " + outcome.Report);
+        }
+
+        if (_isSaveOwed) SaveInBackground();
+    }
+
+    private ReportSet Collect() => new(ReportText(), Report.FramesCsv(_recorder), Report.SecondsCsv(_recorder));
+
+    private SaveOutcome Logged(SaveOutcome outcome, string failurePrefix, bool isQuietWhenSaved = false)
+    {
+        if (!outcome.IsSaved) _log(failurePrefix + outcome.Failure);
+        else if (!isQuietWhenSaved) _log("report saved to " + outcome.Report);
+
+        return outcome;
+    }
+
+    private string RecordingStamp() => _stamp.Length > 0 ? _stamp : _stamp = NewStamp();
+
+    private static string NewStamp() => DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
 }

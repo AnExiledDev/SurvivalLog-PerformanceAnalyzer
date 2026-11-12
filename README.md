@@ -11,6 +11,8 @@ This is a development tool for testing mods. It is not released and has no Nexus
 3. Read the **Overview** tab: the verdict at the top says whether mods are a real part of the frame time, and which one costs the most. The **Game** tab shows the game's frame rate, world updates, speed and memory.
 4. Press **Copy report** to put a text report on the clipboard, or **Save** to write it to a file.
 
+While it records, the analyzer also saves the report on its own every 60 seconds and once more when you press Stop. Each save replaces the last: `report-<date>.txt` (the date recording started), `latest-report.txt` and the two CSVs. If the game crashes or is closed hard, the last save is still there. `SaveEverySeconds` sets how often, and `0` turns it off.
+
 `Esc` or the close button closes the panel. Recording keeps going while it is closed.
 
 ## What it measures

@@ -15,6 +15,8 @@
   <ItemGroup>
     <Compile Include="..\..\src\PerformanceAnalyzer\Core\*.cs" Link="Core\%(Filename)%(Extension)" />
     <Compile Include="..\..\markers\PerfMarkers.cs" Link="markers\PerfMarkers.cs" />
+    <!-- Plain file writing, no game types, so the save's file handling can be tested on a real folder. -->
+    <Compile Include="..\..\src\PerformanceAnalyzer\Adapters\ReportFiles.cs" Link="Adapters\ReportFiles.cs" />
     <Compile Include="$(ToolkitSrc)\Core\JsText.cs" Link="Toolkit\JsText.cs" />
   </ItemGroup>
 

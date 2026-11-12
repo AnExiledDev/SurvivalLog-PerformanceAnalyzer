@@ -20,7 +20,7 @@ namespace PerformanceAnalyzer;
 public sealed class Plugin : BasePlugin
 {
     private const string Guid = "com.dev.survivallog.perfanalyzer";
-    private const string Version = "0.7.7";
+    private const string Version = "0.7.8";
 
     /// <summary>Exiled's Toolkit: the page messages, live settings, UI size, typing check, hooks and log all come from it.</summary>
     private const string ToolkitGuid = "com.dev.survivallog.exiledtoolkit";
@@ -51,6 +51,9 @@ public sealed class Plugin : BasePlugin
         var saveOnQuit = Config.Bind("Recording", "SaveOnQuit", true,
             "Save a report to BepInEx/performance-analyzer when the game closes, if anything was recorded.\n" +
             "游戏关闭时，如有记录内容，则把报告保存到 BepInEx/performance-analyzer。");
+        var saveEvery = Config.Bind("Recording", "SaveEverySeconds", 60f,
+            "While recording, save the report to BepInEx/performance-analyzer this often, in seconds, and once more when recording stops, so a crash or a hard close still leaves one. 0 turns it off.\n" +
+            "记录时每隔这么多秒把报告保存到 BepInEx/performance-analyzer，停止记录时再保存一次，这样即使游戏崩溃或被强行关闭也能留下报告。0 表示关闭。");
         var patches = Config.Bind("Probes", "Patches", true,
             "Time every other mod's Harmony prefixes, postfixes and finalizers, and the hooked methods they sit on.\n" +
             "统计其他每个模组的 Harmony 前缀、后缀与终结补丁，以及它们所钩住的方法的耗时。");
@@ -113,10 +116,11 @@ public sealed class Plugin : BasePlugin
             traceKey.Value,
             autoStart.Value,
             saveOnQuit.Value,
+            saveEvery.Value,
             new ProbeOptions(patches.Value, tickers.Value, gameTime.Value, exclude.Value.Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToArray()),
             webProbe.Value,
             scriptTraffic.Value,
-            tagScripts.Value), panelKey, traceKey, autoStart, saveOnQuit, patches, tickers, gameTime, exclude, webProbe, scriptTraffic, tagScripts);
+            tagScripts.Value), panelKey, traceKey, autoStart, saveOnQuit, saveEvery, patches, tickers, gameTime, exclude, webProbe, scriptTraffic, tagScripts);
         LiveSettings.Watch(hitchMs, ms => recorder.HitchMs = Math.Max(1, ms));
         LiveSettings.Watch(windowFrames, frames => recorder.SetWindow(Math.Max(16, frames)));
         LiveSettings.Watch(overlay, isOn => session.Overlay = isOn);
