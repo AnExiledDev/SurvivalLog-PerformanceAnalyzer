@@ -100,6 +100,21 @@ public sealed class SceneStats
 
     public SceneStats(string name) => Name = name;
 
+    private SceneStats(SceneStats from)
+    {
+        Array.Copy(from._histogram, _histogram, _histogram.Length);
+        Name = from.Name;
+        Frames = from.Frames;
+        Ms = from.Ms;
+        MaxMs = from.MaxMs;
+        Hitches = from.Hitches;
+        Over16 = from.Over16;
+        Over33 = from.Over33;
+        LogicFrames = from.LogicFrames;
+    }
+
+    public SceneStats Copy() => new(this);
+
     public string Name { get; }
 
     public long Frames { get; private set; }
@@ -192,6 +207,66 @@ public sealed class GameStats
     private string _scene = "";
     private string _page = "";
     private WebReading _web;
+
+    public GameStats()
+    {
+    }
+
+    private GameStats(GameStats from)
+    {
+        _timeline.AddRange(from._timeline);
+
+        foreach (var scene in from._scenes)
+        {
+            var copy = scene.Copy();
+
+            _scenes.Add(copy);
+            _sceneByName[copy.Name] = copy;
+        }
+
+        foreach (var pair in from._speedMs) _speedMs[pair.Key] = pair.Value;
+
+        _second = from._second;
+        _frames = from._frames;
+        _ms = from._ms;
+        _maxMs = from._maxMs;
+        _logic = from._logic;
+        _fixed = from._fixed;
+        _hitches = from._hitches;
+        _clock = from._clock;
+        _capped = from._capped;
+        _lastClock = from._lastClock;
+        _world = from._world;
+        _memory = from._memory;
+        _scene = from._scene;
+        _page = from._page;
+        _web = from._web;
+        WebTotals = from.WebTotals;
+        WebSeconds = from.WebSeconds;
+        WebWorst = from.WebWorst;
+        WebWorstSecond = from.WebWorstSecond;
+        WebWorstPage = from.WebWorstPage;
+        Frames = from.Frames;
+        Ms = from.Ms;
+        InGameMs = from.InGameMs;
+        PausedMs = from.PausedMs;
+        LogicFrames = from.LogicFrames;
+        LogicMs = from.LogicMs;
+        FixedSteps = from.FixedSteps;
+        ClockAdvance = from.ClockAdvance;
+        GameTimeMs = from.GameTimeMs;
+        CappedMs = from.CappedMs;
+        CappedFrames = from.CappedFrames;
+        FirstMemory = from.FirstMemory;
+        FirstMemoryAt = from.FirstMemoryAt;
+        LastMemory = from.LastMemory;
+        LastMemoryAt = from.LastMemoryAt;
+        PeakMemory = from.PeakMemory;
+        HasWorld = from.HasWorld;
+    }
+
+    /// <summary>A copy with its own seconds and scenes, for a report built on another thread.</summary>
+    public GameStats Copy() => new(this);
 
     public IReadOnlyList<SecondSample> Timeline => _timeline;
 

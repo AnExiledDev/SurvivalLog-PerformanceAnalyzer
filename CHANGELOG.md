@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.9
+
+- The report that saves itself while recording is now put together in the background, not only written there, so the game spends much less time on each save.
+- Made for Survival Log 1.1.20719.
+
 ## 0.7.8
 
 - While recording, the report now saves itself every 60 seconds and once more when you press Stop, so a crash or a hard close still leaves one. Each save replaces the last: `report-<date>.txt` (the date recording started), `latest-report.txt` and the two CSVs in `BepInEx/performance-analyzer`. The files are written in the background. `SaveEverySeconds` sets how often, and `0` turns it off.

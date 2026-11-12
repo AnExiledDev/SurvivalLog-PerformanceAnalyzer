@@ -132,9 +132,22 @@ internal sealed class AnalyzerSession
     {
         if (!Settings.SaveOnQuit || _recorder.FrameCount == 0) return;
 
-        // A save still being written would otherwise land after this one with older numbers.
-        _writing?.Wait(QuitWaitMs);
+        WaitForSaveInProgress();
         Logged(ReportFiles.Write(_reportDir, RecordingStamp(), Collect()), "could not save the report on quit: ");
+    }
+
+    /// <summary>A save still being written would otherwise land after the one on quit, with older numbers.</summary>
+    private void WaitForSaveInProgress()
+    {
+        try
+        {
+            _writing?.Wait(QuitWaitMs);
+        }
+        catch (AggregateException ex)
+        {
+            // The frame that would have logged it never comes.
+            _log("could not save the report on its own: " + ex.GetBaseException().Message);
+        }
     }
 
     private void Tick()
@@ -398,7 +411,18 @@ internal sealed class AnalyzerSession
         _log("numbers cleared");
     }
 
-    private string ReportText() => Report.Text(_recorder, new ReportInput(Stopwatch.GetTimestamp(), DateTime.Now, _version, Application.version, Machine.Describe(), _instrumenter.Status, _traffic.Rows(), _webJson, _plugins.Loaded, (_trace?.LastText ?? "") + (_hop.LastText.Length > 0 ? "\n" + _hop.LastText : "")));
+    private string ReportText() => Report.Text(_recorder, Inputs());
+
+    /// <summary>What the report names besides the recorder. Read on the main thread: the machine line asks the engine.</summary>
+    private ReportInput Inputs() => new(Stopwatch.GetTimestamp(), DateTime.Now, _version, Application.version, Machine.Describe(), _instrumenter.Status, _traffic.Rows(), _webJson, _plugins.Loaded, (_trace?.LastText ?? "") + (_hop.LastText.Length > 0 ? "\n" + _hop.LastText : ""));
+
+    /// <summary>The same, with copies of the instrumenter's notes and the plugin list, which the main thread can still add to.</summary>
+    private ReportInput CopiedInputs()
+    {
+        var input = Inputs();
+
+        return input with { Status = input.Status with { Notes = input.Status.Notes.ToArray() }, Loaded = input.Loaded.ToArray() };
+    }
 
     /// <summary>The Save button: a new set of files named for now, apart from the recording's own.</summary>
     private void Save(bool tellPanel)
@@ -412,8 +436,8 @@ internal sealed class AnalyzerSession
     }
 
     /// <summary>
-    /// Saves the recording's own files without holding up the frame on the disk: the report is made here, since the
-    /// recorder changes every frame, and only the writing happens on another thread.
+    /// Saves the recording's own files without holding up the frame: the numbers are copied here, since the recorder
+    /// changes every frame, and the report is built from the copy and written on another thread.
     /// </summary>
     private void SaveInBackground()
     {
@@ -425,10 +449,11 @@ internal sealed class AnalyzerSession
         }
 
         var stamp = RecordingStamp();
-        var set = Collect();
+        var recorded = _recorder.Copy();
+        var input = CopiedInputs();
 
         _isSaveOwed = false;
-        _writing = Task.Run(() => ReportFiles.Write(_reportDir, stamp, set));
+        _writing = Task.Run(() => ReportFiles.Write(_reportDir, stamp, ReportSet.Of(recorded, input)));
     }
 
     private void TakeFinishedSave()
@@ -437,7 +462,8 @@ internal sealed class AnalyzerSession
 
         _writing = null;
 
-        // Write catches its own failures, so a faulted task is a bug; it is still logged and saving goes on.
+        // Write catches its own failures, so a faulted task is a bug in building the report; it is still logged and
+        // saving goes on.
         var result = done.IsCompletedSuccessfully ? done.Result : new SaveOutcome("", done.Exception?.GetBaseException().Message ?? "the save did not finish");
         var outcome = Logged(result, "could not save the report on its own: ", isQuietWhenSaved: true);
 
@@ -450,7 +476,7 @@ internal sealed class AnalyzerSession
         if (_isSaveOwed) SaveInBackground();
     }
 
-    private ReportSet Collect() => new(ReportText(), Report.FramesCsv(_recorder), Report.SecondsCsv(_recorder));
+    private ReportSet Collect() => ReportSet.Of(_recorder, Inputs());
 
     private SaveOutcome Logged(SaveOutcome outcome, string failurePrefix, bool isQuietWhenSaved = false)
     {

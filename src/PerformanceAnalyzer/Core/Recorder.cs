@@ -66,9 +66,68 @@ public sealed class Recorder
     {
         _ticksPerMs = ticksPerMs;
         _ring = new FrameRing(windowFrames);
+        Game = new GameStats();
         HitchMs = hitchMs;
         AddMod(new ModInfo("game", "Game", "", ""));
         AddMod(new ModInfo("perfanalyzer", "Performance Analyzer", "", ""));
+    }
+
+    /// <summary>
+    /// Everything recorded so far, copied, so a report can be built on another thread while this recorder goes on
+    /// recording. Hitches, slow web messages and the probe and mod names are shared, since nothing changes one once it
+    /// is recorded; the totals, frames, seconds and scenes, which change every frame, are copied.
+    /// </summary>
+    public Recorder Copy() => new(this);
+
+    private Recorder(Recorder from)
+    {
+        _ticksPerMs = from._ticksPerMs;
+        _probes.AddRange(from._probes);
+        _mods.AddRange(from._mods);
+
+        foreach (var totals in from._probeTotals) _probeTotals.Add(totals.Copy());
+        foreach (var totals in from._modTotals) _modTotals.Add(totals.Copy());
+
+        _frameSelf.AddRange(from._frameSelf);
+        _frameAlloc.AddRange(from._frameAlloc);
+        _frameCalls.AddRange(from._frameCalls);
+        _active.AddRange(from._active);
+        _touched.AddRange(from._touched);
+        _modFrameMs.AddRange(from._modFrameMs);
+        _modFrameAlloc.AddRange(from._modFrameAlloc);
+        Array.Copy(from._stack, _stack, from._depth);
+        _depth = from._depth;
+        _overflow = from._overflow;
+
+        lock (from._offThreadCalls)
+        {
+            foreach (var pair in from._offThreadCalls) _offThreadCalls[pair.Key] = pair.Value;
+        }
+
+        _hitches.AddRange(from._hitches);
+
+        foreach (var pair in from._hitchCauses) _hitchCauses[pair.Key] = pair.Value;
+
+        _slowMessages.AddRange(from._slowMessages);
+        _pageNames.Clear();
+        _pageNames.AddRange(from._pageNames);
+
+        foreach (var pair in from._pageIds) _pageIds[pair.Key] = pair.Value;
+
+        _page = from._page;
+        _ring = from._ring.Copy();
+        _lastFrameEnd = from._lastFrameEnd;
+        _hasFrameStart = from._hasFrameStart;
+        _recordStart = from._recordStart;
+        _stoppedSeconds = from._stoppedSeconds;
+        _frameCallCount = from._frameCallCount;
+        Game = from.Game.Copy();
+        IsRecording = from.IsRecording;
+        HitchMs = from.HitchMs;
+        OverheadTicksPerCall = from.OverheadTicksPerCall;
+        SlowMessageCount = from.SlowMessageCount;
+        FrameCount = from.FrameCount;
+        HitchCount = from.HitchCount;
     }
 
     public bool IsRecording { get; private set; }
@@ -104,7 +163,7 @@ public sealed class Recorder
     public long SlowMessageCount { get; private set; }
 
     /// <summary>The game side: logic updates, game speed and clock, memory over time, frame times per scene.</summary>
-    public GameStats Game { get; } = new();
+    public GameStats Game { get; }
 
     public long FrameCount { get; private set; }
 
@@ -529,6 +588,8 @@ public sealed class ProbeTotals
     /// <summary>Set when a call in the frame being recorded beat <see cref="MaxCallTicks"/>; cleared at the frame's end.</summary>
     internal bool MaxCallThisFrame;
 
+    public ProbeTotals Copy() => (ProbeTotals)MemberwiseClone();
+
     public void Clear()
     {
         Calls = SelfTicks = TotalTicks = AllocBytes = MaxCallTicks = Frames = FirstCallTicks = 0;
@@ -546,6 +607,8 @@ public sealed class ModTotals
     /// <summary>Hitches where this mod took 40% of the frame or more on its own.</summary>
     public long CausedHitches;
     public double WorstFrameMs;
+
+    public ModTotals Copy() => (ModTotals)MemberwiseClone();
 
     public void Clear()
     {

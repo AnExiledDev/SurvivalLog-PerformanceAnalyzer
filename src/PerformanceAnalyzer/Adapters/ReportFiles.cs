@@ -1,10 +1,18 @@
 using System;
 using System.IO;
+using PerformanceAnalyzer.Core;
 
 namespace PerformanceAnalyzer.Adapters;
 
-/// <summary>A report's text and its two spreadsheets, made on the main thread so they can be written on another.</summary>
-internal sealed record ReportSet(string Text, string FramesCsv, string SecondsCsv);
+/// <summary>A report's text and its two spreadsheets, ready to be written.</summary>
+internal sealed record ReportSet(string Text, string FramesCsv, string SecondsCsv)
+{
+    /// <summary>
+    /// Off the main thread, pass a <see cref="Recorder.Copy"/> and inputs whose lists are copies, never the recorder
+    /// that is still recording: it changes every frame.
+    /// </summary>
+    public static ReportSet Of(Recorder recorder, ReportInput input) => new(Report.Text(recorder, input), Report.FramesCsv(recorder), Report.SecondsCsv(recorder));
+}
 
 /// <summary>Where a save went, and the first thing that went wrong ("" when every file was written).</summary>
 internal sealed record SaveOutcome(string Report, string Failure)

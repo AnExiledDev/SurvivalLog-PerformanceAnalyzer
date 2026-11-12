@@ -31,6 +31,23 @@ public sealed class FrameRing
         _sorted = new float[Capacity];
     }
 
+    /// <summary>A copy with frames of its own, for a report built on another thread.</summary>
+    public FrameRing Copy() => new(this);
+
+    private FrameRing(FrameRing from) : this(from.Capacity)
+    {
+        Array.Copy(from._frames, _frames, Capacity);
+
+        foreach (var series in from._modMs) _modMs.Add((float[])series.Clone());
+        foreach (var histogram in from._modHistograms) _modHistograms.Add((int[])histogram.Clone());
+
+        _next = from._next;
+        Count = from.Count;
+        _version = from._version;
+        _spreadVersion = from._spreadVersion;
+        _spread = from._spread;
+    }
+
     public int Capacity { get; }
 
     public int Count { get; private set; }
