@@ -74,3 +74,9 @@ Each marker shows as its own row, kind `marker`, in the Methods tab, the report 
 - [Exiled's Toolkit](https://github.com/AnExiledDev/SurvivalLog-ExiledToolkit) 0.20.0 or newer. Performance Analyzer does not load without it. It stops the panel key and the trace key from firing while you type, passes the panel's button presses to the mod, applies settings changed on the Mod Manager's Mods screen without a restart, and its UI size setting sizes the panel, the corner overlay and the notices. Performance Analyzer's `UiScale` setting under Interface sets a size for this mod alone. At 0, the default, it uses the Toolkit's size.
 
 Settings are in [CONFIG.md](CONFIG.md).
+
+## Feedback and bug reports
+
+Found a bug or have an idea? Come say hi in the [unofficial modding Discord for Survival Log](https://discord.gg/pDrQtqbZgb). When reporting a bug, attach `BepInEx\LogOutput.log`.
+
+To reach me directly, message `exiled.dev` on Discord. You can find me in the [unofficial modding Discord](https://discord.gg/pDrQtqbZgb) and the [official Survival Log Discord](https://discord.gg/MZGg4gQAUe). I'm also on X as [@AnExiledDev](https://x.com/AnExiledDev).
